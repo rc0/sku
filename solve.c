@@ -20,8 +20,10 @@
 #define NDIM 6
 
 struct cell {
-  char *name;
-  short group[NDIM];
+  char *name;           /* cell name for verbose + debug output. */
+  int index;            /* self-index (to track reordering during geographical sort.) */
+  short prow, pcol;     /* coordinates for printing */
+  short group[NDIM];    /* table of groups the cell is in (-1 for unused dimensions) */
 };
 
 /* examples are for the regular 9x9 puzzle. */
@@ -30,10 +32,34 @@ struct layout {
   int ns;               /* number of symbols, e.g. 9 (=groupsize)*/
   int nc;               /* number of cells, e.g. 81 */
   int ng;               /* number of groups, e.g. 27 */
+  int prows;            /* #rows for generating print grid */
+  int pcols;            /* #cols for generating print grid */
   const char *symbols;        /* [ns] table of the symbols */
   struct cell *cells;   /* [nc] table of cell definitions */
   short *groups;        /* [ng*ns] table of cell indices in each of the groups */
   char **group_names;    /* [ng] array of strings. */
+};
+
+struct subgrid {
+  int yoff;
+  int xoff;
+  char *name;
+};
+
+enum corner {NW, NE, SE, SW};
+
+struct subgrid_link {
+  int index0;
+  enum corner corner0;
+  int index1;
+  enum corner corner1;
+};
+
+struct super_layout {
+  int n_subgrids;
+  struct subgrid *subgrids;
+  int n_links;
+  struct subgrid_link *links;
 };
 
 /* ============================================================================ */
@@ -47,7 +73,7 @@ struct layout {
 
 /* ============================================================================ */
 
-static void print_NxN(FILE *out, int N, int *state, const char *symbols);
+static void display(FILE *out, struct layout *lay, int *state);
 
 /* ============================================================================ */
 
@@ -125,7 +151,8 @@ static void show_symbols_in_set(int ns, const char *symbols, int bitmap)/*{{{*/
   }
 }
 /*}}}*/
-static int solve(struct layout *lay, int *state, int iter, int options)/*{{{*/
+/* ============================================================================ */
+static int infer(struct layout *lay, int *state, int iter, int options)/*{{{*/
 {
   /*
    * n : number of symbols to solve for (=size of each cell group)
@@ -165,7 +192,7 @@ static int solve(struct layout *lay, int *state, int iter, int options)/*{{{*/
   while (1) {
     
     if (options & OPT_VERBOSE) {
-      print_NxN(stderr, lay->n, state, lay->symbols);
+      display(stderr, lay, state);
     }
 
     iter++;
@@ -447,50 +474,58 @@ try_next_symbol:
     if (!did_something) {
 
       if (options & OPT_SPECULATE) {
+        int min_poss, index_min;
         /* Have to speculate and recurse.
          * TODO : ought to pick a cell with the lowest number of possibilities and iterate
          * over those?*/
         int ic;
         int n_solutions, n_sol;
         n_solutions = 0;
+        index_min = -1;
+        min_poss = lay->ns + 1;
         for (ic=0; ic<lay->nc; ic++) {
-          if (poss[ic]) {
-            int *solution, *scratch;
-            int i, mask;
-            int start_point;
-            int ii;
-            solution = new_array(int, lay->nc);
-            scratch = new_array(int, lay->nc);
-            start_point = lrand48() % lay->ns;
-            /* TODO : randomise start point? */
-            for (i=0; i<lay->ns; i++) {
-              ii = (start_point + i) % lay->ns;
-              mask = 1<<ii;
-              if (mask & poss[ic]) {
-                if (options & OPT_VERBOSE) {
-                  fprintf(stderr, "Speculate <%s> is <%c>\n",
-                      lay->cells[ic].name, lay->symbols[ii]);
-                }
-                memcpy(scratch, state, lay->nc * sizeof(int));
-                scratch[ic] = ii;
-                n_sol = solve(lay, scratch, iter, options);
-                if (n_sol > 0) {
-                  memcpy(solution, scratch, lay->nc * sizeof(int));
-                  n_solutions += n_sol;
-                  if (options & OPT_FIRST_ONLY) {
-                    break;
-                  }
-                }
-                if ((options & OPT_STOP_ON_2) && (n_solutions >= 2)) {
+          int nposs = count_bits(poss[ic]);
+          if ((nposs > 0) && (nposs < min_poss)) {
+            min_poss = nposs;
+            index_min = ic;
+          }
+        }
+        if (index_min >= 0) {
+          int *solution, *scratch;
+          int i, mask;
+          int start_point;
+          int ii;
+          solution = new_array(int, lay->nc);
+          scratch = new_array(int, lay->nc);
+          start_point = lrand48() % lay->ns;
+          /* TODO : randomise start point? */
+          for (i=0; i<lay->ns; i++) {
+            ii = (start_point + i) % lay->ns;
+            mask = 1<<ii;
+            if (mask & poss[index_min]) {
+              if (options & OPT_VERBOSE) {
+                fprintf(stderr, "Speculate <%s> is <%c>\n",
+                    lay->cells[index_min].name, lay->symbols[ii]);
+              }
+              memcpy(scratch, state, lay->nc * sizeof(int));
+              scratch[index_min] = ii;
+              n_sol = infer(lay, scratch, iter, options);
+              if (n_sol > 0) {
+                memcpy(solution, scratch, lay->nc * sizeof(int));
+                n_solutions += n_sol;
+                if (options & OPT_FIRST_ONLY) {
                   break;
                 }
               }
+              if ((options & OPT_STOP_ON_2) && (n_solutions >= 2)) {
+                break;
+              }
             }
-            free(scratch);
-            memcpy(state, solution, lay->nc * sizeof(int));
-            free(solution);
-            return n_solutions;
           }
+          free(scratch);
+          memcpy(state, solution, lay->nc * sizeof(int));
+          free(solution);
+          return n_solutions;
         }
       } else {
         return 0;
@@ -501,9 +536,84 @@ try_next_symbol:
   }
 }
 /*}}}*/
+/* ============================================================================ */
 
-/* ============================================================================ */
-/* ============================================================================ */
+static void superlayout_5(struct super_layout *superlay)/*{{{*/
+{
+  superlay->n_subgrids = 5;
+  superlay->n_links = 4;
+  superlay->subgrids = new_array(struct subgrid, 5);
+  superlay->links = new_array(struct subgrid_link, 4);
+  superlay->subgrids[0] = (struct subgrid) {0,0,strdup("NW")};
+  superlay->subgrids[1] = (struct subgrid) {0,2,strdup("NE")};
+  superlay->subgrids[2] = (struct subgrid) {2,0,strdup("SW")};
+  superlay->subgrids[3] = (struct subgrid) {2,2,strdup("SE")};
+  superlay->subgrids[4] = (struct subgrid) {1,1,strdup("C")};
+
+  superlay->links[0] = (struct subgrid_link) {0, SE, 4, NW};
+  superlay->links[1] = (struct subgrid_link) {1, SW, 4, NE};
+  superlay->links[2] = (struct subgrid_link) {2, NE, 4, SW};
+  superlay->links[3] = (struct subgrid_link) {3, NW, 4, SE};
+}
+/*}}}*/
+static void superlayout_8(struct super_layout *superlay)/*{{{*/
+{
+  superlay->n_subgrids = 8;
+  superlay->n_links = 8;
+  superlay->subgrids = new_array(struct subgrid, 8);
+  superlay->links = new_array(struct subgrid_link, 8);
+  superlay->subgrids[0] = (struct subgrid) {0,0,strdup("NW")};
+  superlay->subgrids[1] = (struct subgrid) {0,2,strdup("N")};
+  superlay->subgrids[2] = (struct subgrid) {0,4,strdup("NE")};
+  superlay->subgrids[3] = (struct subgrid) {2,0,strdup("SW")};
+  superlay->subgrids[4] = (struct subgrid) {2,2,strdup("S")};
+  superlay->subgrids[5] = (struct subgrid) {2,4,strdup("S")};
+  superlay->subgrids[6] = (struct subgrid) {1,1,strdup("CW")};
+  superlay->subgrids[7] = (struct subgrid) {1,3,strdup("CE")};
+
+  superlay->links[0] = (struct subgrid_link) {0, SE, 6, NW};
+  superlay->links[1] = (struct subgrid_link) {1, SW, 6, NE};
+  superlay->links[2] = (struct subgrid_link) {3, NE, 6, SW};
+  superlay->links[3] = (struct subgrid_link) {4, NW, 6, SE};
+  superlay->links[4] = (struct subgrid_link) {1, SE, 7, NW};
+  superlay->links[5] = (struct subgrid_link) {2, SW, 7, NE};
+  superlay->links[6] = (struct subgrid_link) {4, NE, 7, SW};
+  superlay->links[7] = (struct subgrid_link) {5, NW, 7, SE};
+}
+/*}}}*/
+static void superlayout_11(struct super_layout *superlay)/*{{{*/
+{
+  superlay->n_subgrids = 11;
+  superlay->n_links = 12;
+  superlay->subgrids = new_array(struct subgrid, 11);
+  superlay->links = new_array(struct subgrid_link, 12);
+  superlay->subgrids[0]  = (struct subgrid) {0,0,strdup("NW")};
+  superlay->subgrids[1]  = (struct subgrid) {0,2,strdup("NNW")};
+  superlay->subgrids[2]  = (struct subgrid) {0,4,strdup("NNE")};
+  superlay->subgrids[3]  = (struct subgrid) {0,6,strdup("NE")};
+  superlay->subgrids[4]  = (struct subgrid) {2,0,strdup("SW")};
+  superlay->subgrids[5]  = (struct subgrid) {2,2,strdup("SSW")};
+  superlay->subgrids[6]  = (struct subgrid) {2,4,strdup("SSE")};
+  superlay->subgrids[7]  = (struct subgrid) {2,6,strdup("SE")};
+  superlay->subgrids[8]  = (struct subgrid) {1,1,strdup("CW")};
+  superlay->subgrids[9]  = (struct subgrid) {1,3,strdup("CC")};
+  superlay->subgrids[10] = (struct subgrid) {1,5,strdup("CE")};
+
+  superlay->links[0]  = (struct subgrid_link) {0, SE,  8, NW};
+  superlay->links[1]  = (struct subgrid_link) {1, SW,  8, NE};
+  superlay->links[2]  = (struct subgrid_link) {4, NE,  8, SW};
+  superlay->links[3]  = (struct subgrid_link) {5, NW,  8, SE};
+  superlay->links[4]  = (struct subgrid_link) {1, SE,  9, NW};
+  superlay->links[5]  = (struct subgrid_link) {2, SW,  9, NE};
+  superlay->links[6]  = (struct subgrid_link) {5, NE,  9, SW};
+  superlay->links[7]  = (struct subgrid_link) {6, NW,  9, SE};
+  superlay->links[8]  = (struct subgrid_link) {2, SE, 10, NW};
+  superlay->links[9]  = (struct subgrid_link) {3, SW, 10, NE};
+  superlay->links[10] = (struct subgrid_link) {6, NE, 10, SW};
+  superlay->links[11] = (struct subgrid_link) {7, NW, 10, SE};
+}
+/*}}}*/
+
 /* ============================================================================ */
 
 /* Routines specific to a 9x9 standard grid. */
@@ -525,7 +635,13 @@ const static char symbols_25[25] = {/*{{{*/
   'V', 'W', 'X', 'Y', 'Z'
 };
 /*}}}*/
-static void layout_NxN(int N, struct layout *lay) {/*{{{*/
+static void layout_NxN(int N, struct layout *lay) /*{{{*/
+{
+  /* This function is REQUIRED to return the cells in raster scan order.
+   * Obviously this is necessary for the grid reader, but it's also
+   * required for fusing the sub-grids together when setting up a
+   * 5-gattai layout and similar horrors. */
+
   int i, j, m, n;
   int k;
   int N2 = N*N;
@@ -535,6 +651,7 @@ static void layout_NxN(int N, struct layout *lay) {/*{{{*/
   lay->ns = N2;
   lay->ng = 3*N2;
   lay->nc = N2*N2;
+  lay->prows = lay->pcols = N2 + (N-1);
   if (N == 3) {
     lay->symbols = symbols_9;
   } else if (N == 4) {
@@ -563,6 +680,9 @@ static void layout_NxN(int N, struct layout *lay) {/*{{{*/
           for (k=3; k<6; k++) {
             lay->cells[ic].group[k] = -1;
           }
+          /* Put spacers every N rows/cols in the printout. */
+          lay->cells[ic].prow = row + (row / N);
+          lay->cells[ic].pcol = col + (col / N);
           lay->groups[N2*(row) + col] = ic;
           lay->groups[N2*(N2+col) + row] = ic;
           lay->groups[N2*(2*N2+block) + N*j + n] = ic;
@@ -573,20 +693,228 @@ static void layout_NxN(int N, struct layout *lay) {/*{{{*/
   lay->group_names = new_array(char *, 3*N2);
   for (i=0; i<N2; i++) {
     char buffer[32];
-    sprintf(buffer, "row %c", 'A' + i);
+    sprintf(buffer, "row-%c", 'A' + i);
     lay->group_names[i] = strdup(buffer);
-    sprintf(buffer, "col %d", 1 + i);
+    sprintf(buffer, "col-%d", 1 + i);
     lay->group_names[i+N2] = strdup(buffer);
-    sprintf(buffer, "blk %c%d", 'A' + N*(i/N), 1 + N*(i%N));
+    sprintf(buffer, "blk-%c%d", 'A' + N*(i/N), 1 + N*(i%N));
     lay->group_names[i+2*N2] = strdup(buffer);
   }
+}
+/*}}}*/
+
+static int superlayout_cell_compare(const void *a, const void *b)/*{{{*/
+{
+  const struct cell *aa = (const struct cell *) a;
+  const struct cell *bb = (const struct cell *) b;
+  /* Sort cells into raster order, with all the overlapped cells pushed to the top end. */
+  if (aa->index < 0 && bb->index >= 0) {
+    return 1;
+  } else if (aa->index >= 0 && bb->index < 0) {
+    return -1;
+  } else {
+    if (aa->prow < bb->prow) {
+      return -1;
+    } else if (aa->prow > bb->prow) {
+      return 1;
+    } else if (aa->pcol < bb->pcol) {
+      return -1;
+    } else if (aa->pcol > bb->pcol) {
+      return 1;
+    } else {
+      return 0;
+    }
+  }
+}
+/*}}}*/
+static void layout_N_superlay(int N, const struct super_layout *superlay, struct layout *lay)/*{{{*/
+{
+  struct layout *tlay;
+  int nsg;
+  int i;
+  char buffer[64];
+  int tng;
+  int tnc;
+  int tns;
+  int *rmap;
+
+  nsg = superlay->n_subgrids;
+  tlay = new_array(struct layout, nsg);
+  for (i=0; i<nsg; i++) {
+    layout_NxN(N, tlay + i);
+  }
+
+  /* Relabel and reindex the tables. */
+  for (i=0; i<nsg; i++) {
+    struct subgrid *sg = superlay->subgrids + i;
+    struct layout *ll = tlay + i;
+    int group_base = i * ll->ng;
+    int cell_base  = i * ll->nc;
+    int j, k;
+    for (j=0; j<ll->nc; j++) {
+      struct cell *c = ll->cells + j;
+      c->index = j + cell_base;
+      sprintf(buffer, "%s:%s", sg->name, c->name);
+      c->name = strdup(buffer);
+      c->prow += (N-1)*(N+1) * sg->yoff;
+      c->pcol += (N-1)*(N+1) * sg->xoff;
+
+      for (k=0; k<NDIM; k++) {
+        if (c->group[k] >= 0) {
+          c->group[k] += group_base;
+        } else {
+          break;
+        }
+      }
+    }
+    for (j=0; j<ll->ng; j++) {
+      for (k=0; k<ll->ns; k++) {
+        ll->groups[j*ll->ns + k] += cell_base;
+      }
+      sprintf(buffer, "%s:%s", sg->name, ll->group_names[j]);
+      ll->group_names[j] = strdup(buffer);
+    }
+  }
+
+  /* Merge into one big table. */
+  lay->n  = N;
+  tns     = tlay[0].ns;
+  lay->ns = tns;
+  tng     = tlay[0].ng;
+  lay->ng = tng * nsg;
+  /* Number of cells excludes the overlaps. */
+  tnc = tlay[0].nc;
+  lay->nc = tnc * nsg - (superlay->n_links * tns);
+
+  lay->symbols = tlay[0].symbols;
+  lay->group_names = new_array(char *, lay->ng);
+  lay->groups = new_array(short, lay->ng*lay->ns);
+
+  /* This is oversized to start with - we just don't use the tail end of it later on. */
+  lay->cells  = new_array(struct cell, tnc * nsg);
+  fflush(stderr);
+
+  for (i=0; i<nsg; i++) {
+    void *addr;
+    memcpy(lay->group_names + (tng * i),
+           tlay[i].group_names,
+           sizeof(char*) * tng);
+    memcpy(lay->groups + (tng * tns * i),
+           tlay[i].groups,
+           sizeof(short) * tng * tns);
+    memcpy(lay->cells + (tnc * i),
+           tlay[i].cells,
+           sizeof(struct cell) * tnc);
+  }
+
+  /* Now we can work purely on the master layout. */
+
+  /* Merge cells in the overlapping blocks */
+  for (i=0; i<superlay->n_links; i++) {
+    struct subgrid_link *sgl = superlay->links + i;
+    int m, n;
+    struct layout *l0 = tlay + sgl->index0;
+    struct layout *l1 = tlay + sgl->index1;
+    int off0, off1;
+    int N2 = N*N;
+    switch (sgl->corner0) {
+      case NW: off0 = 0; break;
+      case NE: off0 = N*(N-1); break;
+      case SW: off0 = N2*(N2-N); break;
+      case SE: off0 = N2*(N2-N) + N*(N-1); break;
+    }
+    off0 += tnc * sgl->index0;
+    switch (sgl->corner1) {
+      case NW: off1 = 0; break;
+      case NE: off1 = N*(N-1); break;
+      case SW: off1 = N2*(N2-N); break;
+      case SE: off1 = N2*(N2-N) + N*(N-1); break;
+    }
+    off1 += tnc * sgl->index1;
+
+    for (m=0; m<N; m++) {
+      for (n=0; n<N; n++) {
+        int ic0, ic1;
+        int q;
+        struct cell *c0, *c1;
+        ic0 = off0 + m*N2 + n;
+        ic1 = off1 + m*N2 + n;
+        c0 = lay->cells + ic0;
+        c1 = lay->cells + ic1;
+        /* Copy 2ary cell's groups into 1ary cell's table. */
+        for (q=0; q<3; q++) {
+          c0->group[3+q] = c1->group[q];
+        }
+        /* Merge cell names */
+        sprintf(buffer, "%s/%s", c0->name, c1->name);
+        c0->name = strdup(buffer);
+        /* For each group c1 is in, change the index to point to c0 */
+        for (q=0; q<3; q++) {
+          int r;
+          int grp = c1->group[q];
+          for (r=0; r<tns; r++) {
+            if (lay->groups[tns*grp + r] == ic1) {
+              lay->groups[tns*grp + r] = ic0;
+              break;
+            }
+          }
+        }
+        /* Mark c1 as being defunct */
+        c1->index = -1;
+      }
+    }
+  }
+
+  /* Sort the remaining cells into geographical order. */
+  qsort(lay->cells, tnc*nsg, sizeof(struct cell), superlayout_cell_compare);
+
+  /* Build reverse mapping */
+  rmap = new_array(int, tnc * nsg);
+  for (i=0; i<tnc*nsg; i++) {
+    rmap[i] = -1;
+  }
+
+  for (i=0; i<tnc*nsg; i++) {
+    int idx;
+    idx = lay->cells[i].index;
+    if (idx >= 0) {
+      rmap[idx] = i;
+      /* Don't need to repair index fields of cells as they're not used after this. */
+    }
+  }
+  /* Repair indexing (and in all groups) */
+  for (i=0; i<lay->ns*lay->ng; i++) {
+    int new_idx;
+    new_idx = rmap[lay->groups[i]];
+    if (new_idx >= 0) {
+      lay->groups[i] = new_idx;
+    } else {
+      fprintf(stderr, "Oops.\n");
+    }
+  }
+
+  free(rmap);
+  /* Determine prows and pcols */
+  lay->prows = 0;
+  lay->pcols = 0;
+  for (i=0; i<lay->nc; i++) {
+    if (lay->cells[i].prow > lay->prows) lay->prows = lay->cells[i].prow;
+    if (lay->cells[i].pcol > lay->pcols) lay->pcols = lay->cells[i].pcol;
+  }
+  ++lay->prows;
+  ++lay->pcols;
 }
 /*}}}*/
 static void debug_layout(struct layout *lay)/*{{{*/
 {
   int i, j;
   for (i=0; i<lay->nc; i++) {
-    fprintf(stderr, "%3d : %8s ", i, lay->cells[i].name);
+    fprintf(stderr, "%3d : %4d %4d %4d : %-16s ", 
+        i,
+        lay->cells[i].index,
+        lay->cells[i].prow,
+        lay->cells[i].pcol,
+        lay->cells[i].name);
     for (j=0; j<NDIM; j++) {
       int kk = lay->cells[i].group[j];
       if (kk >= 0) {
@@ -600,54 +928,54 @@ static void debug_layout(struct layout *lay)/*{{{*/
 }
 /*}}}*/
 
-static void print_NxN(FILE *out, int N, int *state, const char *symbols)/*{{{*/
+static void display(FILE *out, struct layout *lay, int *state)/*{{{*/
 {
-  int i, j, k;
-  int N2 = N*N;
-  i = 0;
-  for (j=0; j<N2; j++) {
-    for (k=0; k<N2; k++) {
-      int s = state[i++];
-      if ((k>0) && ((k % N) == 0)) fprintf(out, " ");
-      fprintf(out, "%1c", (s>=0) ? symbols[s] : '.');
+  int mn, i, j;
+  char *grid;
+  mn = lay->prows * lay->pcols;
+  grid = new_array(char, mn);
+  memset(grid, ' ', mn);
+  for (i=0; i<lay->nc; i++) {
+    int row = lay->cells[i].prow;
+    int col = lay->cells[i].pcol;
+    int idx = row * lay->pcols + col;
+    if (state[i] < 0) {
+      grid[idx] = '.';
+    } else {
+      grid[idx] = lay->symbols[state[i]];
     }
-    fprintf(out, "\n");
-    if ((j % N) == (N-1)) fprintf(out, "\n");
-
   }
-  fprintf(out, "\n");
+
+  for (i=0, j=0; i<mn; i++) {
+    fputc(grid[i], out);
+    j++;
+    if (j == lay->pcols) {
+      j = 0;
+      fputc('\n', out);
+    }
+  }
+
+  free(grid);
 }
 /*}}}*/
 
-static void solve_NxN(int N, int options)/*{{{*/
+static void read_grid(struct layout *lay, int *state)/*{{{*/
 {
-  /* e.g. N=3, 4 */
-  int *state;
-  int N2, N4;
-  int i, j, k;
-  int c;
-  int n_solutions;
-  struct layout lay;
   int rmap[256];
   int valid[256];
-
-  N2 = N*N;
-  N4 = N2*N2;
-  state = new_array(int, N4);
-
-  layout_NxN(N, &lay);
+  int i, c;
 
   for (i=0; i<256; i++) {
     rmap[i] = -1;
     valid[i] = 0;
   }
-  for (i=0; i<lay.ns; i++) {
-    rmap[lay.symbols[i]] = i;
-    valid[lay.symbols[i]] = 1;
+  for (i=0; i<lay->ns; i++) {
+    rmap[lay->symbols[i]] = i;
+    valid[lay->symbols[i]] = 1;
   }
   valid['.'] = 1;
 
-  for (i=0; i<N4; i++) {
+  for (i=0; i<lay->nc; i++) {
     do {
       c = getchar();
       if (c == EOF) {
@@ -659,8 +987,17 @@ static void solve_NxN(int N, int options)/*{{{*/
       }
     } while (!valid[c]);
   }
+}
+/*}}}*/
+static void solve(struct layout *lay, int options)/*{{{*/
+{
+  int *state;
+  int i;
+  int n_solutions;
 
-  n_solutions = solve(&lay, state, 0, options);
+  state = new_array(int, lay->nc);
+  read_grid(lay, state);
+  n_solutions = infer(lay, state, 0, options);
 
   if (n_solutions == 0) {
     fprintf(stderr, "The puzzle had no solutions\n");
@@ -672,60 +1009,73 @@ static void solve_NxN(int N, int options)/*{{{*/
     fprintf(stderr, "The puzzle had %d solutions (one is shown)\n", n_solutions);
   }
 
-  print_NxN(stdout, N, state, lay.symbols);
+  display(stdout, lay, state);
 
   return;
 }
 /*}}}*/
+static void solve_any(struct layout *lay, int options)/*{{{*/
+{
+  int *state;
+  int i;
+  int n_solutions;
 
-static void pose_NxN(int N)/*{{{*/
+  state = new_array(int, lay->nc);
+  read_grid(lay, state);
+  n_solutions = infer(lay, state, 0, OPT_SPECULATE | OPT_FIRST_ONLY | options);
+
+  if (n_solutions == 0) {
+    fprintf(stderr, "The puzzle had no solutions\n");
+    return;
+  }
+
+  display(stdout, lay, state);
+
+  return;
+}
+/*}}}*/
+static void reduce(struct layout *lay, int options)/*{{{*/
 {
   int *state, *copy, *answer;
   int *keep;
   int i;
-  struct layout lay;
   int ok;
-  int N2, N4;
   int tally;
+  int kept_givens = 0;
 
-  N2 = N*N;
-  N4 = N2*N2;
+  state = new_array(int, lay->nc);
+  copy = new_array(int, lay->nc);
+  answer = new_array(int, lay->nc);
+  keep = new_array(int, lay->nc);
 
-  state = new_array(int, N4);
-  copy = new_array(int, N4);
-  answer = new_array(int, N4);
-  keep = new_array(int, N4);
-
-  layout_NxN(N, &lay);
-  for (i=0; i<N4; i++) {
-    state[i] = -1;
-    keep[i] = 0;
+  read_grid(lay, state);
+  memset(keep, 0, lay->nc * sizeof(int));
+  tally = 0;
+  for (i=0; i<lay->nc; i++) {
+    if (state[i] >= 0) tally++;
   }
-
-  if (1 != solve(&lay, state, 0, OPT_SPECULATE | OPT_FIRST_ONLY)) {
-    fprintf(stderr, "??? FAILED TO GENERATE AN INITIAL GRID!!\n");
-    exit(1);
-  }
-  /* Must be at least 1 solution if the solver tries hard enough! */
 
   /* Now remove givens one at a time until we find a minimum number that leaves
    * a puzzle with a unique solution. */
-  memcpy(answer, state, N4*sizeof(int));
+  memcpy(answer, state, lay->nc * sizeof(int));
 
-  tally = N4;
   do {
     int start_point;
-    start_point = lrand48() % N4;
+    start_point = lrand48() % lay->nc;
     ok = -1;
-    for (i=0; i<N4; i++) {
+    for (i=0; i<lay->nc; i++) {
       int ii;
       int n_sol;
-      ii = (i + start_point) % N4;
+      ii = (i + start_point) % lay->nc;
       if (state[ii] < 0) continue;
       if (keep[ii] == 1) continue;
-      memcpy(copy, state, N4*sizeof(int));
+      memcpy(copy, state, lay->nc * sizeof(int));
       copy[ii] = -1;
-      n_sol = solve(&lay, copy, 0, OPT_STOP_ON_2);
+      if (options & OPT_SPECULATE) {
+        n_sol = infer(lay, copy, 0, OPT_SPECULATE);
+      } else {
+        n_sol = infer(lay, copy, 0, OPT_STOP_ON_2);
+      }
       tally--;
       if (n_sol == 1) {
         ok = ii;
@@ -733,30 +1083,133 @@ static void pose_NxN(int N)/*{{{*/
       } else {
         /* If it's no good removing this given now, it won't be any better to try
          * removing it again later... */
-        fprintf(stderr, "%4d :  (can't remove given from <%s>)\n", tally, lay.cells[ii].name);
+        if (options & OPT_VERBOSE) {
+          fprintf(stderr, "%4d :  (can't remove given from <%s>)\n", tally, lay->cells[ii].name);
+        }
+        keep[ii] = 1;
+        ++kept_givens;
+      }
+    }
+
+    if (ok >= 0) {
+      if (options & OPT_VERBOSE) {
+        fprintf(stderr, "%4d : Removing given from <%s>\n", tally, lay->cells[ok].name);
+      }
+      state[ok] = -1;
+    }
+  } while (ok >= 0);
+
+  if (options & OPT_VERBOSE) {
+    fprintf(stderr, "%d givens kept\n", kept_givens);
+  }
+  display(stdout, lay, state);
+
+  return;
+}
+/*}}}*/
+static void pose(struct layout *lay)/*{{{*/
+{
+  int *state, *copy, *answer;
+  int *keep;
+  int i;
+  int ok;
+  int tally;
+
+  state = new_array(int, lay->nc);
+  copy = new_array(int, lay->nc);
+  answer = new_array(int, lay->nc);
+  keep = new_array(int, lay->nc);
+
+  for (i=0; i<lay->nc; i++) {
+    state[i] = -1;
+    keep[i] = 0;
+  }
+
+  if (1 != infer(lay, state, 0, OPT_SPECULATE | OPT_FIRST_ONLY)) {
+    fprintf(stderr, "??? FAILED TO GENERATE AN INITIAL GRID!!\n");
+    exit(1);
+  }
+  /* Must be at least 1 solution if the solver tries hard enough! */
+
+  /* Now remove givens one at a time until we find a minimum number that leaves
+   * a puzzle with a unique solution. */
+  memcpy(answer, state, lay->nc * sizeof(int));
+
+  tally = lay->nc;
+  do {
+    int start_point;
+    start_point = lrand48() % lay->nc;
+    ok = -1;
+    for (i=0; i<lay->nc; i++) {
+      int ii;
+      int n_sol;
+      ii = (i + start_point) % lay->nc;
+      if (state[ii] < 0) continue;
+      if (keep[ii] == 1) continue;
+      memcpy(copy, state, lay->nc * sizeof(int));
+      copy[ii] = -1;
+      n_sol = infer(lay, copy, 0, OPT_STOP_ON_2);
+      tally--;
+      if (n_sol == 1) {
+        ok = ii;
+        break;
+      } else {
+        /* If it's no good removing this given now, it won't be any better to try
+         * removing it again later... */
+        fprintf(stderr, "%4d :  (can't remove given from <%s>)\n", tally, lay->cells[ii].name);
         keep[ii] = 1;
       }
     }
 
     if (ok >= 0) {
-      fprintf(stderr, "%4d : Removing given from <%s>\n", tally, lay.cells[ok].name);
+      fprintf(stderr, "%4d : Removing given from <%s>\n", tally, lay->cells[ok].name);
       state[ok] = -1;
     }
   } while (ok >= 0);
 
-  print_NxN(stdout, N, state, lay.symbols);
+  display(stdout, lay, state);
 
   return;
 }
 /*}}}*/
-
+static void blank(struct layout *lay)/*{{{*/
+{
+  int *state;
+  int i;
+  state = new_array(int, lay->nc);
+  for (i=0; i<lay->nc; i++) {
+    state[i] = -1;
+  }
+  display(stdout, lay, state);
+}
+/*}}}*/
 int main (int argc, char **argv)/*{{{*/
 {
   int options;
-  int do_pose = 0;
-  int do_solve = 1;
   int seed;
   int N = 3;
+  enum format {
+    LAY_3x3,
+    LAY_4x4,
+    LAY_5x5,
+    LAY_3x3x5,
+    LAY_3x3x8,
+    LAY_3x3x11,
+    LAY_4x4x5
+  } format;
+  enum operation {
+    OP_BLANK,     /* Generate a blank grid */
+    OP_ANY,       /* Generate any solution to a partial grid */
+    OP_REDUCE,    /* Remove givens until it's no longer possible without
+                     leaving an ambiguous puzzle. */
+    OP_POSE,
+    OP_SOLVE
+  } operation;
+  struct super_layout superlay;
+  struct layout lay;
+  
+  format = LAY_3x3;
+  operation = OP_SOLVE;
 
   options = 0;
   while (++argv, --argc) {
@@ -765,27 +1218,81 @@ int main (int argc, char **argv)/*{{{*/
     } else if (!strcmp(*argv, "-f")) {
       options |= OPT_FIRST_ONLY;
     } else if (!strcmp(*argv, "-p")) {
-      do_pose = 1;
-      do_solve = 0;
+      operation = OP_POSE;
+    } else if (!strcmp(*argv, "-b")) {
+      operation = OP_BLANK;
+    } else if (!strcmp(*argv, "-a")) {
+      operation = OP_ANY;
+    } else if (!strcmp(*argv, "-r")) {
+      operation = OP_REDUCE;
     } else if (!strcmp(*argv, "-s")) {
       options |= OPT_SPECULATE;
     } else if (!strcmp(*argv, "-4")) {
-      N = 4;
+      format = LAY_4x4;
     } else if (!strcmp(*argv, "-5")) {
-      N = 5;
+      format = LAY_5x5;
+    } else if (!strcmp(*argv, "-3/5")) {
+      format = LAY_3x3x5;
+    } else if (!strcmp(*argv, "-3/8")) {
+      format = LAY_3x3x8;
+    } else if (!strcmp(*argv, "-3/11")) {
+      format = LAY_3x3x11;
+    } else if (!strcmp(*argv, "-4/5")) {
+      format = LAY_4x4x5;
     }
   }
 
   seed = time(NULL) ^ getpid();
-  fprintf(stderr, "Seed=%d\n", seed);
-  srand48(seed);
-  if (do_solve) {
-    solve_NxN(N, options);
+  if (options & OPT_VERBOSE) {
+    fprintf(stderr, "Seed=%d\n", seed);
   }
-  if (do_pose) {
-    pose_NxN(N);
+  srand48(seed);
+  switch (format) {
+    case LAY_3x3:
+      layout_NxN(3, &lay);
+      break;
+    case LAY_4x4:
+      layout_NxN(4, &lay);
+      break;
+    case LAY_5x5:
+      layout_NxN(5, &lay);
+      break;
+    case LAY_3x3x5:
+      superlayout_5(&superlay);
+      layout_N_superlay(3, &superlay, &lay);
+      break;
+    case LAY_3x3x8:
+      superlayout_8(&superlay);
+      layout_N_superlay(3, &superlay, &lay);
+      break;
+    case LAY_3x3x11:
+      superlayout_11(&superlay);
+      layout_N_superlay(3, &superlay, &lay);
+      break;
+    case LAY_4x4x5:
+      superlayout_5(&superlay);
+      layout_N_superlay(4, &superlay, &lay);
+      break;
+  }
+  switch (operation) {
+    case OP_SOLVE:
+      solve(&lay, options);
+      break;
+    case OP_POSE:
+      pose(&lay);
+      break;
+    case OP_ANY:
+      solve_any(&lay, options);
+      break;
+    case OP_REDUCE:
+      reduce(&lay, options);
+      break;
+    case OP_BLANK:
+      blank(&lay);
   }
   return 0;
 }
 /*}}}*/
+
 /* ============================================================================ */
+
