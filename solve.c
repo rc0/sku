@@ -1187,6 +1187,45 @@ static void solve_any(struct layout *lay, int options)/*{{{*/
   return;
 }
 /*}}}*/
+static void inner_reduce_symmetrify_blanks(struct layout *lay, int *state, int options)/*{{{*/
+{
+  int i;
+  if (options & OPT_SYM_180) {
+    for (i=0; i<lay->nc; i++) {
+      if (state[i] < 0) {
+        int oi;
+        oi = lay->cells[i].sy180;
+        if (oi >= 0) {
+          state[oi] = -1;
+          if (options & OPT_SYM_90) {
+            int oi0, oi1;
+            oi0 = lay->cells[i].sy90;
+            oi1 = lay->cells[oi].sy90;
+            if (oi0 >= 0) state[oi0] = -1;
+            if (oi1 >= 0) state[oi1] = -1;
+          }
+        }
+      }
+    }
+  }
+}
+/*}}}*/
+static int inner_reduce_check_solvable(struct layout *lay, int *state, int options)/*{{{*/
+{
+  int *copy;
+  int n_solutions, result;
+  copy = new_array(int, lay->nc);
+  memcpy(copy, state, lay->nc * sizeof(int));
+  n_solutions = infer(lay, copy, 0, OPT_STOP_ON_2 | (options & OPT_SPECULATE));
+  if (n_solutions == 1) {
+    result = 1;
+  } else {
+    result = 0;
+  }
+  free(copy);
+  return result;
+}
+/*}}}*/
 static int inner_reduce(struct layout *lay, int *state, int options)/*{{{*/
 {
   int *copy, *answer;
@@ -1195,6 +1234,11 @@ static int inner_reduce(struct layout *lay, int *state, int options)/*{{{*/
   int ok;
   int tally;
   int kept_givens = 0;
+
+  inner_reduce_symmetrify_blanks(lay, state, options);
+  if (!inner_reduce_check_solvable(lay, state, options)) {
+    fprintf(stderr, "Cannot reduce the puzzle, it doesn't have a unique solution\n");
+  }
 
   copy = new_array(int, lay->nc);
   answer = new_array(int, lay->nc);
@@ -1320,7 +1364,7 @@ static int inner_reduce(struct layout *lay, int *state, int options)/*{{{*/
   return kept_givens;
 }
 /*}}}*/
-static void reduce(struct layout *lay, int options)/*{{{*/
+static void reduce(struct layout *lay, int iters_for_min, int options)/*{{{*/
 {
   int *state;
   int i;
@@ -1331,12 +1375,29 @@ static void reduce(struct layout *lay, int options)/*{{{*/
   state = new_array(int, lay->nc);
 
   read_grid(lay, state);
-  kept_givens = inner_reduce(lay, state, options);
+  if (iters_for_min == 0) {
+    kept_givens = inner_reduce(lay, state, options);
 
-  if (options & OPT_VERBOSE) {
-    fprintf(stderr, "%d givens kept\n", kept_givens);
+    if (options & OPT_VERBOSE) {
+      fprintf(stderr, "%d givens kept\n", kept_givens);
+    }
+    display(stdout, lay, state);
+  } else {
+    int i;
+    int min_givens;
+    int *copy;
+    min_givens = lay->nc;
+    copy = new_array(int, lay->nc);
+    for (i=0; i<iters_for_min; i++) {
+      memcpy(copy, state, lay->nc * sizeof(int));
+      kept_givens = inner_reduce(lay, copy, options);
+      if (kept_givens < min_givens) {
+        min_givens = kept_givens;
+        fprintf(stdout, "Found a layout with %d givens\n", kept_givens);
+        display(stdout, lay, copy);
+      }
+    }
   }
-  display(stdout, lay, state);
 
   return;
 }
@@ -1537,6 +1598,7 @@ int main (int argc, char **argv)/*{{{*/
   int options;
   int seed;
   int N = 3;
+  int iters_for_min = 0;
   enum format {
     LAY_3x3,
     LAY_4x4,
@@ -1585,6 +1647,8 @@ int main (int argc, char **argv)/*{{{*/
       options |= OPT_SYM_180;
     } else if (!strcmp(*argv, "-yy")) {
       options |= OPT_SYM_180 | OPT_SYM_90;
+    } else if (!strncmp(*argv, "-m", 2)) {
+      iters_for_min = atoi(*argv + 2);
     } else if (!strcmp(*argv, "-d")) {
       operation = OP_DISCOVER;
     } else if (!strcmp(*argv, "-4")) {
@@ -1651,7 +1715,7 @@ int main (int argc, char **argv)/*{{{*/
       solve_any(&lay, options);
       break;
     case OP_REDUCE:
-      reduce(&lay, options);
+      reduce(&lay, iters_for_min, options);
       break;
     case OP_BLANK:
       blank(&lay);
