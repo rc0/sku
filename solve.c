@@ -24,6 +24,7 @@ struct cell {
   int index;            /* self-index (to track reordering during geographical sort.) */
   short prow, pcol;     /* coordinates for printing to text output */
   short rrow, rcol;     /* raw coordinates for printing to formatted output (SVG etc) */
+  short sy180, sy90;    /* indices of cells that are 180/90 deg away clockwise (-1 for none) */
   short group[NDIM];    /* table of groups the cell is in (-1 for unused dimensions) */
 };
 
@@ -85,6 +86,8 @@ struct super_layout {
 #define OPT_FIRST_ONLY (1<<1)
 #define OPT_STOP_ON_2 (1<<2)
 #define OPT_SPECULATE (1<<3)
+#define OPT_SYM_180 (1<<4)
+#define OPT_SYM_90 (1<<5)
 
 /* ============================================================================ */
 
@@ -660,9 +663,61 @@ static void superlayout_11(struct super_layout *superlay)/*{{{*/
 /*}}}*/
 
 /* ============================================================================ */
+/* ============================================================================ */
 
-/* Routines specific to a 9x9 standard grid. */
+static int find_cell_by_yx(struct cell *c, int n, int y, int x)/*{{{*/
+{
+  int h, m, l;
+  int mx, my, lx, ly;
+  h = n;
+  l = 0;
+  while (h - l > 1) {
+    m = (h + l) >> 1;
+    mx = c[m].rcol;
+    my = c[m].rrow;
+    if ((my > y) || ((my == y) && (mx > x))) {
+      h = m;
+    } else if ((my <= y) || ((my == y) && (mx <= x))) {
+      l = m;
+    }
+  }
+  lx = c[l].rcol;
+  ly = c[l].rrow;
+  if ((lx == x) && (ly == y)) return l;
+  else return -1;
+}
+/*}}}*/
+static void find_symmetries(struct layout *lay)/*{{{*/
+{
+  int maxy, maxx;
+  int i;
+  maxy = maxx = 0;
+  for (i=0; i<lay->nc; i++) {
+    int y, x;
+    y = lay->cells[i].rrow;
+    x = lay->cells[i].rcol;
+    if (y > maxy) maxy = y;
+    if (x > maxx) maxx = x;
+  }
 
+  /* For searching, we know the cell array is sorted in y-major x-minor order. */
+  for (i=0; i<lay->nc; i++) {
+    int y, x, oy, ox;
+    y = lay->cells[i].rrow;
+    x = lay->cells[i].rcol;
+    /* 180 degree symmetry */
+    oy = maxy - y;
+    ox = maxx - x;
+    lay->cells[i].sy180 = find_cell_by_yx(lay->cells, lay->nc, oy, ox);
+    if (maxy == maxx) {
+      /* 90 degree symmetry : nonsensical unless the grid's bounding box is square! */
+      oy = x;
+      ox = maxx - y;
+      lay->cells[i].sy90 = find_cell_by_yx(lay->cells, lay->nc, oy, ox);
+    }
+  }
+}
+/*}}}*/
 const static char symbols_9[9] = {/*{{{*/
   '1', '2', '3', '4', '5', '6', '7', '8', '9'
 };
@@ -768,6 +823,8 @@ static void layout_NxN(int N, struct layout *lay) /*{{{*/
     d->x0 = d->x1 = i;
     d->y0 = 0, d->y1 = N2;
   }
+
+  find_symmetries(lay);
 }
 /*}}}*/
 
@@ -996,6 +1053,9 @@ static void layout_N_superlay(int N, const struct super_layout *superlay, struct
   }
   ++lay->prows;
   ++lay->pcols;
+
+  find_symmetries(lay);
+
 }
 /*}}}*/
 static void debug_layout(struct layout *lay)/*{{{*/
@@ -1152,16 +1212,33 @@ static int inner_reduce(struct layout *lay, int *state, int options)/*{{{*/
 
   do {
     int start_point;
+    int oi, oi0, oi1;
     start_point = lrand48() % lay->nc;
     ok = -1;
+    oi = oi0 = oi1 = -1;
     for (i=0; i<lay->nc; i++) {
       int ii;
       int n_sol;
+
       ii = (i + start_point) % lay->nc;
       if (state[ii] < 0) continue;
       if (keep[ii] == 1) continue;
+      oi = oi0 = oi1 = -1;
+      if (options & OPT_SYM_180) {
+        oi = lay->cells[ii].sy180;
+        if (oi == ii) {
+          oi = -1;
+        } else if (options & OPT_SYM_90) {
+          oi0 = lay->cells[ii].sy90;
+          oi1 = lay->cells[oi].sy90;
+        }
+      }
       memcpy(copy, state, lay->nc * sizeof(int));
       copy[ii] = -1;
+      /* If symmetric, remove those too */
+      if (oi  >= 0) copy[oi]  = -1;
+      if (oi0 >= 0) copy[oi0] = -1;
+      if (oi1 >= 0) copy[oi1] = -1;
       if (options & OPT_SPECULATE) {
         n_sol = infer(lay, copy, 0, OPT_SPECULATE);
       } else {
@@ -1179,14 +1256,60 @@ static int inner_reduce(struct layout *lay, int *state, int options)/*{{{*/
         }
         keep[ii] = 1;
         ++kept_givens;
+        if (oi >= 0) {
+          keep[oi] = 1;
+          ++kept_givens;
+          if (options & OPT_VERBOSE) {
+            fprintf(stderr, "%4d :  (can't remove given from <%s> (sym180))\n", tally, lay->cells[oi].name);
+          }
+          tally--;
+        }
+        if (oi0 >= 0) {
+          keep[oi0] = 1;
+          ++kept_givens;
+          if (options & OPT_VERBOSE) {
+            fprintf(stderr, "%4d :  (can't remove given from <%s> (sym90))\n", tally, lay->cells[oi0].name);
+          }
+          tally--;
+        }
+        if (oi1 >= 0) {
+          keep[oi1] = 1;
+          ++kept_givens;
+          if (options & OPT_VERBOSE) {
+            fprintf(stderr, "%4d :  (can't remove given from <%s> (sym90))\n", tally, lay->cells[oi1].name);
+          }
+          tally--;
+        }
       }
     }
 
     if (ok >= 0) {
+      state[ok] = -1;
       if (options & OPT_VERBOSE) {
         fprintf(stderr, "%4d : Removing given from <%s>\n", tally, lay->cells[ok].name);
       }
-      state[ok] = -1;
+
+      if (oi >= 0) {
+        state[oi] = -1;
+        if (options & OPT_VERBOSE) {
+          fprintf(stderr, "%4d : Removing given from <%s> (sym180)\n", tally, lay->cells[oi].name);
+        }
+        tally--;
+      }
+      if (oi0 >= 0) {
+        state[oi0] = -1;
+        if (options & OPT_VERBOSE) {
+          fprintf(stderr, "%4d : Removing given from <%s> (sym90)\n", tally, lay->cells[oi0].name);
+        }
+        tally--;
+      }
+      if (oi1 >= 0) {
+        state[oi1] = -1;
+        if (options & OPT_VERBOSE) {
+          fprintf(stderr, "%4d : Removing given from <%s> (sym90)\n", tally, lay->cells[oi1].name);
+        }
+        tally--;
+      }
     }
   } while (ok >= 0);
 
@@ -1458,6 +1581,10 @@ int main (int argc, char **argv)/*{{{*/
       options |= OPT_SPECULATE;
     } else if (!strcmp(*argv, "-F")) {
       operation = OP_FORMAT;
+    } else if (!strcmp(*argv, "-y")) {
+      options |= OPT_SYM_180;
+    } else if (!strcmp(*argv, "-yy")) {
+      options |= OPT_SYM_180 | OPT_SYM_90;
     } else if (!strcmp(*argv, "-d")) {
       operation = OP_DISCOVER;
     } else if (!strcmp(*argv, "-4")) {
