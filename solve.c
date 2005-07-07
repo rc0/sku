@@ -123,7 +123,7 @@ static int decode(unsigned int a)/*{{{*/
 }
 /*}}}*/
 
-static inline void allocate(struct layout *lay, int *state, int *poss, int *todo, int ic, int val)/*{{{*/
+static inline void allocate(struct layout *lay, int *state, int *poss, int *todo, int *order, int ic, int val, int *solvepos)/*{{{*/
 {
   int mask;
   int k;
@@ -131,6 +131,9 @@ static inline void allocate(struct layout *lay, int *state, int *poss, int *todo
   mask = 1<<val;
   state[ic] = val;
   poss[ic] = 0;
+  if (order) {
+    order[ic] = (*solvepos)++;
+  }
 
   for (k=0; k<NDIM; k++) {
     int gi = lay->cells[ic].group[k];
@@ -170,7 +173,7 @@ static void show_symbols_in_set(int ns, const char *symbols, int bitmap)/*{{{*/
 }
 /*}}}*/
 /* ============================================================================ */
-static int infer(struct layout *lay, int *state, int iter, int options)/*{{{*/
+static int infer(struct layout *lay, int *state, int *order, int iter, int solvepos, int options)/*{{{*/
 {
   /*
    * n : number of symbols to solve for (=size of each cell group)
@@ -310,7 +313,7 @@ static int infer(struct layout *lay, int *state, int iter, int options)/*{{{*/
                 fprintf(stderr, "%4d : Allocate <%c> to <%s> (allocate in <%s>)\n",
                     iter, lay->symbols[i], lay->cells[free_ic].name, lay->group_names[k]);
               }
-              allocate(lay, state, poss, todo, free_ic, i);
+              allocate(lay, state, poss, todo, order, free_ic, i, &solvepos);
               did_something = 1;
             }
           }
@@ -330,7 +333,7 @@ static int infer(struct layout *lay, int *state, int iter, int options)/*{{{*/
                   iter, lay->symbols[sol], lay->cells[i].name);
             }
 
-            allocate(lay, state, poss, todo, i, sol);
+            allocate(lay, state, poss, todo, order, i, sol, &solvepos);
             did_something = 1;
           }
         }
@@ -527,7 +530,7 @@ try_next_symbol:
               }
               memcpy(scratch, state, lay->nc * sizeof(int));
               scratch[index_min] = ii;
-              n_sol = infer(lay, scratch, iter, options);
+              n_sol = infer(lay, scratch, order, iter, solvepos, options);
               if (n_sol > 0) {
                 memcpy(solution, scratch, lay->nc * sizeof(int));
                 n_solutions += n_sol;
@@ -1150,7 +1153,7 @@ static void solve(struct layout *lay, int options)/*{{{*/
 
   state = new_array(int, lay->nc);
   read_grid(lay, state);
-  n_solutions = infer(lay, state, 0, options);
+  n_solutions = infer(lay, state, NULL, 0, 0, options);
 
   if (n_solutions == 0) {
     fprintf(stderr, "The puzzle had no solutions\n");
@@ -1175,7 +1178,7 @@ static void solve_any(struct layout *lay, int options)/*{{{*/
 
   state = new_array(int, lay->nc);
   read_grid(lay, state);
-  n_solutions = infer(lay, state, 0, OPT_SPECULATE | OPT_FIRST_ONLY | options);
+  n_solutions = infer(lay, state, NULL, 0, 0, OPT_SPECULATE | OPT_FIRST_ONLY | options);
 
   if (n_solutions == 0) {
     fprintf(stderr, "The puzzle had no solutions\n");
@@ -1216,7 +1219,7 @@ static int inner_reduce_check_solvable(struct layout *lay, int *state, int optio
   int n_solutions, result;
   copy = new_array(int, lay->nc);
   memcpy(copy, state, lay->nc * sizeof(int));
-  n_solutions = infer(lay, copy, 0, OPT_STOP_ON_2 | (options & OPT_SPECULATE));
+  n_solutions = infer(lay, copy, NULL, 0, 0, OPT_STOP_ON_2 | (options & OPT_SPECULATE));
   if (n_solutions == 1) {
     result = 1;
   } else {
@@ -1284,9 +1287,9 @@ static int inner_reduce(struct layout *lay, int *state, int options)/*{{{*/
       if (oi0 >= 0) copy[oi0] = -1;
       if (oi1 >= 0) copy[oi1] = -1;
       if (options & OPT_SPECULATE) {
-        n_sol = infer(lay, copy, 0, OPT_SPECULATE);
+        n_sol = infer(lay, copy, NULL, 0, 0, OPT_SPECULATE);
       } else {
-        n_sol = infer(lay, copy, 0, OPT_STOP_ON_2);
+        n_sol = infer(lay, copy, NULL, 0, 0, OPT_STOP_ON_2);
       }
       tally--;
       if (n_sol == 1) {
@@ -1367,12 +1370,14 @@ static int inner_reduce(struct layout *lay, int *state, int options)/*{{{*/
 static void reduce(struct layout *lay, int iters_for_min, int options)/*{{{*/
 {
   int *state;
+  int *result;
   int i;
   int ok;
   int tally;
   int kept_givens = 0;
 
   state = new_array(int, lay->nc);
+  result = new_array(int, lay->nc);
 
   read_grid(lay, state);
   if (iters_for_min == 0) {
@@ -1393,11 +1398,14 @@ static void reduce(struct layout *lay, int iters_for_min, int options)/*{{{*/
       kept_givens = inner_reduce(lay, copy, options);
       if (kept_givens < min_givens) {
         min_givens = kept_givens;
-        fprintf(stdout, "Found a layout with %d givens\n", kept_givens);
-        display(stdout, lay, copy);
+        fprintf(stderr, "Found a layout with %d givens\n", kept_givens);
+        display(stderr, lay, copy);
       }
+      memcpy(result, copy, lay->nc * sizeof(int));
     }
   }
+
+  display(stdout, lay, result);
 
   return;
 }
@@ -1420,7 +1428,7 @@ static void pose(struct layout *lay)/*{{{*/
     keep[i] = 0;
   }
 
-  if (1 != infer(lay, state, 0, OPT_SPECULATE | OPT_FIRST_ONLY)) {
+  if (1 != infer(lay, state, NULL, 0, 0, OPT_SPECULATE | OPT_FIRST_ONLY)) {
     fprintf(stderr, "??? FAILED TO GENERATE AN INITIAL GRID!!\n");
     exit(1);
   }
@@ -1443,7 +1451,7 @@ static void pose(struct layout *lay)/*{{{*/
       if (keep[ii] == 1) continue;
       memcpy(copy, state, lay->nc * sizeof(int));
       copy[ii] = -1;
-      n_sol = infer(lay, copy, 0, OPT_STOP_ON_2);
+      n_sol = infer(lay, copy, NULL, 0, 0, OPT_STOP_ON_2);
       tally--;
       if (n_sol == 1) {
         ok = ii;
@@ -1499,7 +1507,7 @@ static void discover(int options)/*{{{*/
   for (i=0; i<lay.nc; i++) {
     state[i] = -1;
   }
-  n_solutions = infer(&lay, state, 0, OPT_SPECULATE | OPT_FIRST_ONLY | options);
+  n_solutions = infer(&lay, state, NULL, 0, 0, OPT_SPECULATE | OPT_FIRST_ONLY | options);
   if (n_solutions == 0) {
     fprintf(stderr, "oops, couldn't find a solution at the start!!\n");
     exit(1);
@@ -1519,7 +1527,7 @@ static void discover(int options)/*{{{*/
       display(stderr, &lay, copy);
       fprintf(stderr, "Solvable puzzle is :\n");
       display(stderr, &lay, copy2);
-      n_solutions = infer(&lay, copy, 0, OPT_VERBOSE);
+      n_solutions = infer(&lay, copy, NULL, 0, 0, OPT_VERBOSE);
       fprintf(stderr, "Can get this far without guessing:\n");
       display(stdout, &lay, copy);
       exit(0);
@@ -1550,14 +1558,69 @@ static void format_emit_lines(int n, struct dline *d, double stroke_width)/*{{{*
   }
 }
 /*}}}*/
-static void format_output(struct layout *lay, int options)/*{{{*/
+
+struct intpair {/*{{{*/
+  int a;
+  int b;
+};
+/*}}}*/
+static int compare_intpair(const void *a, const void *b)/*{{{*/
 {
-  int *state;
+  const struct intpair *aa = (const struct intpair *) a;
+  const struct intpair *bb = (const struct intpair *) b;
+  if (aa->b < bb->b) return 1;
+  else if (aa->b >  bb->b) return -1;
+  else return 0;
+}
+/*}}}*/
+static void format_output(struct layout *lay, int grey_cells, int options)/*{{{*/
+{
+  int *state, *copy;
+  int *order;
   double scale, offset;
-  int i;
+  int i, j, k, n;
+  struct intpair *shade = NULL;
+  int *shade_index;
+  int *flags;
 
   state = new_array(int, lay->nc);
   read_grid(lay, state);
+
+  if (grey_cells > 0) {
+    int max_order;
+    order = new_array(int, lay->nc);
+    copy = new_array(int, lay->nc);
+    memcpy(copy, state, lay->nc * sizeof(int));
+    memset(order, 0, lay->nc * sizeof(int));
+    infer(lay, copy, order, 0, 0, OPT_SPECULATE);
+    shade = new_array(struct intpair, lay->nc);
+    for (i=0; i<lay->nc; i++) {
+      shade[i].a = i;
+      shade[i].b = order[i];
+    }
+    qsort(shade, lay->nc, sizeof(struct intpair), compare_intpair);
+    flags = new_array(int, lay->nc);
+    memset(flags, 0, lay->nc * sizeof(int));
+    shade_index = new_array(int, grey_cells);
+    for (i=0, j=0; i<grey_cells; i++) {
+      int ic;
+      do {
+        ic = shade[j++].a;
+      } while (flags[ic]);
+      shade_index[i] = ic;
+      for (k=0; k<NDIM; k++) {
+        int gx = lay->cells[ic].group[k];
+        if (gx >= 0) {
+          for (n=0; n<lay->ns; n++) {
+            int oic = lay->groups[gx*lay->ns + n];
+            flags[oic] = 1;
+          }
+        } else {
+          break;
+        }
+      }
+    }
+  }
   
   scale = 72.27 / 2.54;
   offset = 2.0 * scale;
@@ -1576,6 +1639,24 @@ static void format_output(struct layout *lay, int options)/*{{{*/
   printf("<defs\n"
          "id=\"defs3\" />\n");
   printf("<g id=\"layer1\">\n");
+
+  if (grey_cells > 0) {
+    for (i=0; i<grey_cells; i++) {
+      double x, y;
+      double wh;
+      x = offset + scale * ((double) lay->cells[shade_index[i]].rcol);
+      y = offset + scale * ((double) lay->cells[shade_index[i]].rrow);
+      wh = scale * 1.0;
+      printf("<rect style=\"fill:#d8d8d8;fill-opacity:1.0;stroke:none;\"\n");
+      printf("  x=\"%f\" y=\"%f\" width=\"%f\" height=\"%f\" />\n",
+          x, y, wh, wh);
+      x = offset + scale * ((double) lay->cells[shade_index[i]].rcol + 0.8);
+      y = offset + scale * ((double) lay->cells[shade_index[i]].rrow + 0.3);
+      printf("<text style=\"font-size:9;font-style:normal;font-variant:normal;font-weight:bold;fill:#000;fill-opacity:1.0;stroke:none;font-family:Luxi Sans;text-anchor:middle;writing-mode:lr-tb\"\n");
+      printf("x=\"%f\" y=\"%f\">%c</text>\n", x, y, 'A' + i);
+    }
+  }
+  
   format_emit_lines(lay->n_thinlines, lay->thinlines, 1.0);
   format_emit_lines(lay->n_thicklines, lay->thicklines, 3.0);
   for (i=0; i<lay->nc; i++) {
@@ -1599,6 +1680,7 @@ int main (int argc, char **argv)/*{{{*/
   int seed;
   int N = 3;
   int iters_for_min = 0;
+  int grey_cells = 0;
   enum format {
     LAY_3x3,
     LAY_4x4,
@@ -1649,6 +1731,8 @@ int main (int argc, char **argv)/*{{{*/
       options |= OPT_SYM_180 | OPT_SYM_90;
     } else if (!strncmp(*argv, "-m", 2)) {
       iters_for_min = atoi(*argv + 2);
+    } else if (!strncmp(*argv, "-g", 2)) {
+      grey_cells = atoi(*argv + 2);
     } else if (!strcmp(*argv, "-d")) {
       operation = OP_DISCOVER;
     } else if (!strcmp(*argv, "-4")) {
@@ -1724,7 +1808,7 @@ int main (int argc, char **argv)/*{{{*/
       discover(options);
       break;
     case OP_FORMAT:
-      format_output(&lay, options);
+      format_output(&lay, grey_cells, options);
       break;
   }
   return 0;
