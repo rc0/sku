@@ -11,7 +11,9 @@ void display(FILE *out, struct layout *lay, int *state)/*{{{*/
     int row = lay->cells[i].prow;
     int col = lay->cells[i].pcol;
     int idx = row * lay->pcols + col;
-    if (state[i] < 0) {
+    if (state[i] == -2) {
+      grid[idx] = '*';
+    } else if (state[i] == -1) {
       grid[idx] = '.';
     } else {
       grid[idx] = lay->symbols[state[i]];

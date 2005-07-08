@@ -119,8 +119,11 @@ extern void solve_any(struct layout *lay, int options);
 extern int inner_reduce(struct layout *lay, int *state, int options);
 extern void reduce(struct layout *lay, int iters_for_min, int options);
 
+/* In mark.c */
+extern void mark_cells(struct layout *lay, int grey_cells, int options);
+  
 /* In svg.c */
-void format_output(struct layout *lay, int grey_cells, int options);
+extern void format_output(struct layout *lay, int options);
 
 #endif /* SKU_H */
 

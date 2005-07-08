@@ -158,6 +158,7 @@ int main (int argc, char **argv)/*{{{*/
     OP_POSE,
     OP_SOLVE,
     OP_DISCOVER,
+    OP_MARK,
     OP_FORMAT
   } operation;
   struct super_layout superlay;
@@ -180,6 +181,13 @@ int main (int argc, char **argv)/*{{{*/
       operation = OP_ANY;
     } else if (!strcmp(*argv, "-r")) {
       operation = OP_REDUCE;
+    } else if (!strcmp(*argv, "-k")) {
+      operation = OP_MARK;
+      if ((*argv)[2] == 0) {
+        grey_cells = 4;
+      } else {
+        grey_cells = atoi(*argv + 2);
+      }
     } else if (!strcmp(*argv, "-s")) {
       options |= OPT_SPECULATE;
     } else if (!strcmp(*argv, "-F")) {
@@ -190,8 +198,6 @@ int main (int argc, char **argv)/*{{{*/
       options |= OPT_SYM_180 | OPT_SYM_90;
     } else if (!strncmp(*argv, "-m", 2)) {
       iters_for_min = atoi(*argv + 2);
-    } else if (!strncmp(*argv, "-g", 2)) {
-      grey_cells = atoi(*argv + 2);
     } else if (!strcmp(*argv, "-d")) {
       operation = OP_DISCOVER;
     } else if (!strcmp(*argv, "-4")) {
@@ -266,8 +272,11 @@ int main (int argc, char **argv)/*{{{*/
     case OP_DISCOVER:
       discover(options);
       break;
+    case OP_MARK:
+      mark_cells(&lay, grey_cells, options);
+      break;
     case OP_FORMAT:
-      format_output(&lay, grey_cells, options);
+      format_output(&lay, options);
       break;
   }
   return 0;

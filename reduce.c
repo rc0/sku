@@ -213,9 +213,8 @@ void reduce(struct layout *lay, int iters_for_min, int options)/*{{{*/
       }
       memcpy(result, copy, lay->nc * sizeof(int));
     }
+    display(stdout, lay, result);
   }
-
-  display(stdout, lay, result);
 
   return;
 }

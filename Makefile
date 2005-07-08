@@ -1,12 +1,15 @@
 CC := gcc
-CFLAGS := -g
+CFLAGS := -O2
 
-OBJ := sku.o solve.o blank.o display.o util.o infer.o layout.o superlayout.o reduce.o svg.o reader.o
+PROG := sku
+OBJ := sku.o solve.o blank.o display.o util.o infer.o layout.o superlayout.o reduce.o svg.o reader.o mark.o
 
-sku : $(OBJ)
+$(PROG) : $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $^
 
-%.o : %.c
+%.o : %.c sku.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
+clean:
+	-rm -f *.o $(PROG)
 
