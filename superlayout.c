@@ -195,7 +195,6 @@ void layout_N_superlay(int N, const struct super_layout *superlay, struct layout
   }
 
   /* Merge into one big table. */
-  lay->n  = N;
   tns     = tlay[0].ns;
   lay->ns = tns;
   tng     = tlay[0].ng;

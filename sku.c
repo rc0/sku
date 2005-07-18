@@ -140,31 +140,18 @@ int main (int argc, char **argv)/*{{{*/
   int N = 3;
   int iters_for_min = 0;
   int grey_cells = 0;
-  enum format {
-    LAY_3x3,
-    LAY_4x4,
-    LAY_5x5,
-    LAY_3x3x5,
-    LAY_3x3x8,
-    LAY_3x3x11,
-    LAY_3x3x9,
-    LAY_4x4x5
-  } format;
   enum operation {
     OP_BLANK,     /* Generate a blank grid */
     OP_ANY,       /* Generate any solution to a partial grid */
     OP_REDUCE,    /* Remove givens until it's no longer possible without
                      leaving an ambiguous puzzle. */
-    OP_POSE,
     OP_SOLVE,
     OP_DISCOVER,
     OP_MARK,
     OP_FORMAT
   } operation;
-  struct super_layout superlay;
-  struct layout lay;
+  char *layout_name = NULL;
   
-  format = LAY_3x3;
   operation = OP_SOLVE;
 
   options = 0;
@@ -173,15 +160,13 @@ int main (int argc, char **argv)/*{{{*/
       options |= OPT_VERBOSE;
     } else if (!strcmp(*argv, "-f")) {
       options |= OPT_FIRST_ONLY;
-    } else if (!strcmp(*argv, "-p")) {
-      operation = OP_POSE;
     } else if (!strcmp(*argv, "-b")) {
       operation = OP_BLANK;
     } else if (!strcmp(*argv, "-a")) {
       operation = OP_ANY;
     } else if (!strcmp(*argv, "-r")) {
       operation = OP_REDUCE;
-    } else if (!strcmp(*argv, "-k")) {
+    } else if (!strncmp(*argv, "-k", 2)) {
       operation = OP_MARK;
       if ((*argv)[2] == 0) {
         grey_cells = 4;
@@ -200,20 +185,12 @@ int main (int argc, char **argv)/*{{{*/
       iters_for_min = atoi(*argv + 2);
     } else if (!strcmp(*argv, "-d")) {
       operation = OP_DISCOVER;
-    } else if (!strcmp(*argv, "-4")) {
-      format = LAY_4x4;
-    } else if (!strcmp(*argv, "-5")) {
-      format = LAY_5x5;
-    } else if (!strcmp(*argv, "-3/5")) {
-      format = LAY_3x3x5;
-    } else if (!strcmp(*argv, "-3/8")) {
-      format = LAY_3x3x8;
-    } else if (!strcmp(*argv, "-3/11")) {
-      format = LAY_3x3x11;
-    } else if (!strcmp(*argv, "-3/9")) {
-      format = LAY_3x3x9;
-    } else if (!strcmp(*argv, "-4/5")) {
-      format = LAY_4x4x5;
+    } else if (!strncmp(*argv, "-L", 2)) {
+      /* Only needed for 'blank' mode now. */
+      layout_name = *argv + 2;
+    } else {
+      fprintf(stderr, "Unrecognized argument <%s>\n", *argv);
+      exit(1);
     }
   }
 
@@ -222,61 +199,36 @@ int main (int argc, char **argv)/*{{{*/
     fprintf(stderr, "Seed=%d\n", seed);
   }
   srand48(seed);
-  switch (format) {
-    case LAY_3x3:
-      layout_NxN(3, &lay);
-      break;
-    case LAY_4x4:
-      layout_NxN(4, &lay);
-      break;
-    case LAY_5x5:
-      layout_NxN(5, &lay);
-      break;
-    case LAY_3x3x5:
-      superlayout_5(&superlay);
-      layout_N_superlay(3, &superlay, &lay);
-      break;
-    case LAY_3x3x8:
-      superlayout_8(&superlay);
-      layout_N_superlay(3, &superlay, &lay);
-      break;
-    case LAY_3x3x11:
-      superlayout_11(&superlay);
-      layout_N_superlay(3, &superlay, &lay);
-      break;
-    case LAY_3x3x9:
-      superlayout_9(&superlay);
-      layout_N_superlay(3, &superlay, &lay);
-      break;
-    case LAY_4x4x5:
-      superlayout_5(&superlay);
-      layout_N_superlay(4, &superlay, &lay);
-      break;
-  }
   switch (operation) {
     case OP_SOLVE:
-      solve(&lay, options);
+      solve(options);
       break;
+#if 0
     case OP_POSE:
       pose(&lay);
       break;
+#endif
     case OP_ANY:
-      solve_any(&lay, options);
+      solve_any(options);
       break;
     case OP_REDUCE:
-      reduce(&lay, iters_for_min, options);
+      reduce(iters_for_min, options);
       break;
     case OP_BLANK:
-      blank(&lay);
-      break;
+      {
+        struct layout *lay;
+        lay = genlayout(layout_name ? layout_name : "3");
+        blank(lay);
+        break;
+      }
     case OP_DISCOVER:
       discover(options);
       break;
     case OP_MARK:
-      mark_cells(&lay, grey_cells, options);
+      mark_cells(grey_cells, options);
       break;
     case OP_FORMAT:
-      format_output(&lay, options);
+      format_output(options);
       break;
   }
   return 0;

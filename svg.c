@@ -21,15 +21,15 @@ static void format_emit_lines(int n, struct dline *d, double stroke_width)/*{{{*
   }
 }
 /*}}}*/
-void format_output(struct layout *lay, int options)/*{{{*/
+void format_output(int options)/*{{{*/
 {
   int *state;
   double scale, offset;
   int i, j, k, n;
+  struct layout *lay;
   char grey_sym = 'A';
 
-  state = new_array(int, lay->nc);
-  read_grid(lay, state);
+  read_grid(&lay, &state);
 
   scale = 72.27 / 2.54;
   offset = 2.0 * scale;

@@ -177,7 +177,7 @@ int inner_reduce(struct layout *lay, int *state, int options)/*{{{*/
   return kept_givens;
 }
 /*}}}*/
-void reduce(struct layout *lay, int iters_for_min, int options)/*{{{*/
+void reduce(int iters_for_min, int options)/*{{{*/
 {
   int *state;
   int *result;
@@ -185,11 +185,11 @@ void reduce(struct layout *lay, int iters_for_min, int options)/*{{{*/
   int ok;
   int tally;
   int kept_givens = 0;
+  struct layout *lay;
 
-  state = new_array(int, lay->nc);
+  read_grid(&lay, &state);
   result = new_array(int, lay->nc);
 
-  read_grid(lay, state);
   if (iters_for_min == 0) {
     kept_givens = inner_reduce(lay, state, options);
 

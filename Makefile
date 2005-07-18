@@ -2,7 +2,14 @@ CC := gcc
 CFLAGS := -O2
 
 PROG := sku
-OBJ := sku.o solve.o blank.o display.o util.o infer.o layout.o superlayout.o reduce.o svg.o reader.o mark.o
+OBJ := sku.o \
+	solve.o blank.o display.o util.o \
+	infer.o \
+	genlayout.o layout_nxn.o layout_mxn.o superlayout.o \
+	reduce.o \
+	svg.o \
+	reader.o \
+	mark.o
 
 $(PROG) : $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $^

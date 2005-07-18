@@ -1,13 +1,13 @@
 #include "sku.h"
 
-void solve(struct layout *lay, int options)/*{{{*/
+void solve(int options)/*{{{*/
 {
   int *state;
   int i;
   int n_solutions;
+  struct layout *lay;
 
-  state = new_array(int, lay->nc);
-  read_grid(lay, state);
+  read_grid(&lay, &state);
   n_solutions = infer(lay, state, NULL, 0, 0, options);
 
   if (n_solutions == 0) {
@@ -25,14 +25,14 @@ void solve(struct layout *lay, int options)/*{{{*/
   return;
 }
 /*}}}*/
-void solve_any(struct layout *lay, int options)/*{{{*/
+void solve_any(int options)/*{{{*/
 {
   int *state;
   int i;
   int n_solutions;
+  struct layout *lay;
 
-  state = new_array(int, lay->nc);
-  read_grid(lay, state);
+  read_grid(&lay, &state);
   n_solutions = infer(lay, state, NULL, 0, 0, OPT_SPECULATE | OPT_FIRST_ONLY | options);
 
   if (n_solutions == 0) {

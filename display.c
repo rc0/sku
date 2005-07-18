@@ -20,6 +20,7 @@ void display(FILE *out, struct layout *lay, int *state)/*{{{*/
     }
   }
 
+  fprintf(out, "#layout: %s\n", lay->name);
   for (i=0, j=0; i<mn; i++) {
     fputc(grid[i], out);
     j++;

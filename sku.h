@@ -27,7 +27,7 @@ struct dline
 
 /* examples are for the regular 9x9 puzzle. */
 struct layout {
-  int n;                /* sqrt(ns) */
+  char *name;           /* tag for writing in header card */
   int ns;               /* number of symbols, e.g. 9 (=groupsize)*/
   int nc;               /* number of cells, e.g. 81 */
   int ng;               /* number of groups, e.g. 27 */
@@ -70,6 +70,7 @@ struct super_layout {
 
 /* ============================================================================ */
 
+#define new(T) (T *) malloc(sizeof(T))
 #define new_array(T, n) (T *) malloc((n) * sizeof(T))
 
 #define OPT_VERBOSE (1<<0)
@@ -97,13 +98,19 @@ extern void superlayout_9(struct super_layout *superlay);
 extern void superlayout_11(struct super_layout *superlay);
 extern void layout_N_superlay(int N, const struct super_layout *superlay, struct layout *lay);
 
-/* In layout.c */
-extern void find_symmetries(struct layout *lay);
+/* In layout_nxn.c */
 extern void layout_NxN(int N, struct layout *lay);
+
+/* In layout_mxn.c */
+extern void layout_MxN(int M, int N, struct layout *lay);
+
+/* In genlayout.c */
+extern void find_symmetries(struct layout *lay);
 extern void debug_layout(struct layout *lay);
+extern struct layout *genlayout(const char *name);
 
 /* In reader.c */
-extern void read_grid(struct layout *lay, int *state);
+extern void read_grid(struct layout **lay, int **state);
 
 /* In blank.c */
 extern void blank(struct layout *lay);
@@ -112,18 +119,18 @@ extern void blank(struct layout *lay);
 void display(FILE *out, struct layout *lay, int *state);
 
 /* In solve.c */
-extern void solve(struct layout *lay, int options);
-extern void solve_any(struct layout *lay, int options);
+extern void solve(int options);
+extern void solve_any(int options);
 
 /* In reduce.c */
 extern int inner_reduce(struct layout *lay, int *state, int options);
-extern void reduce(struct layout *lay, int iters_for_min, int options);
+extern void reduce(int iters_for_min, int options);
 
 /* In mark.c */
-extern void mark_cells(struct layout *lay, int grey_cells, int options);
+extern void mark_cells(int grey_cells, int options);
   
 /* In svg.c */
-extern void format_output(struct layout *lay, int options);
+extern void format_output(int options);
 
 #endif /* SKU_H */
 

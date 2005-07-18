@@ -15,7 +15,7 @@ static int compare_intpair(const void *a, const void *b)/*{{{*/
   else return 0;
 }
 /*}}}*/
-void mark_cells(struct layout *lay, int grey_cells, int options)/*{{{*/
+void mark_cells(int grey_cells, int options)/*{{{*/
 {
   int *state;
   int *copy;
@@ -23,9 +23,9 @@ void mark_cells(struct layout *lay, int grey_cells, int options)/*{{{*/
   int *flags;
   int *order;
   int i, j, k, n;
+  struct layout *lay;
 
-  state = new_array(int, lay->nc);
-  read_grid(lay, state);
+  read_grid(&lay, &state);
 
   if (grey_cells > 0) {
     int max_order;
