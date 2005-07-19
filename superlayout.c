@@ -141,7 +141,7 @@ static void fixup_lines(int n, struct dline *d, int xoff, int yoff)/*{{{*/
   }
 }
 /*}}}*/
-void layout_N_superlay(int N, const struct super_layout *superlay, struct layout *lay)/*{{{*/
+void layout_MxN_superlay(int M, int N, const struct super_layout *superlay, struct layout *lay)/*{{{*/
 {
   struct layout *tlay;
   int nsg;
@@ -155,7 +155,7 @@ void layout_N_superlay(int N, const struct super_layout *superlay, struct layout
   nsg = superlay->n_subgrids;
   tlay = new_array(struct layout, nsg);
   for (i=0; i<nsg; i++) {
-    layout_NxN(N, tlay + i);
+    layout_MxN(M, N, tlay + i);
   }
 
   /* Relabel and reindex the tables. */
@@ -170,10 +170,10 @@ void layout_N_superlay(int N, const struct super_layout *superlay, struct layout
       c->index = j + cell_base;
       sprintf(buffer, "%s:%s", sg->name, c->name);
       c->name = strdup(buffer);
-      c->prow += (N-1)*(N+1) * sg->yoff;
-      c->pcol += (N-1)*(N+1) * sg->xoff;
-      c->rrow += sg->yoff * N*(N-1);
-      c->rcol += sg->xoff * N*(N-1);
+      c->prow += (N-1)*(M+1) * sg->yoff;
+      c->pcol += (M-1)*(N+1) * sg->xoff;
+      c->rrow += sg->yoff * M*(N-1);
+      c->rcol += sg->xoff * N*(M-1);
 
       for (k=0; k<NDIM; k++) {
         if (c->group[k] >= 0) {
@@ -190,8 +190,9 @@ void layout_N_superlay(int N, const struct super_layout *superlay, struct layout
       sprintf(buffer, "%s:%s", sg->name, ll->group_names[j]);
       ll->group_names[j] = strdup(buffer);
     }
-    fixup_lines(ll->n_thinlines, ll->thinlines, N*(N-1)*sg->xoff, N*(N-1)*sg->yoff);
-    fixup_lines(ll->n_thicklines, ll->thicklines, N*(N-1)*sg->xoff, N*(N-1)*sg->yoff);
+    fixup_lines(ll->n_thinlines, ll->thinlines, N*(M-1)*sg->xoff, M*(N-1)*sg->yoff);
+    fixup_lines(ll->n_mediumlines, ll->mediumlines, N*(M-1)*sg->xoff, M*(N-1)*sg->yoff);
+    fixup_lines(ll->n_thicklines, ll->thicklines, N*(M-1)*sg->xoff, M*(N-1)*sg->yoff);
   }
 
   /* Merge into one big table. */
@@ -211,8 +212,10 @@ void layout_N_superlay(int N, const struct super_layout *superlay, struct layout
   lay->cells  = new_array(struct cell, tnc * nsg);
 
   lay->n_thicklines = nsg * tlay[0].n_thicklines;
+  lay->n_mediumlines = nsg * tlay[0].n_mediumlines;
   lay->n_thinlines = nsg * tlay[0].n_thinlines;
   lay->thicklines = new_array(struct dline, lay->n_thicklines);
+  lay->mediumlines = new_array(struct dline, lay->n_mediumlines);
   lay->thinlines = new_array(struct dline, lay->n_thinlines);
   
   for (i=0; i<nsg; i++) {
@@ -229,6 +232,9 @@ void layout_N_superlay(int N, const struct super_layout *superlay, struct layout
     memcpy(lay->thinlines + (tlay[0].n_thinlines * i),
            tlay[i].thinlines,
            sizeof(struct dline) * tlay[0].n_thinlines);
+    memcpy(lay->mediumlines + (tlay[0].n_mediumlines * i),
+           tlay[i].mediumlines,
+           sizeof(struct dline) * tlay[0].n_mediumlines);
     memcpy(lay->thicklines + (tlay[0].n_thicklines * i),
            tlay[i].thicklines,
            sizeof(struct dline) * tlay[0].n_thicklines);
@@ -243,29 +249,29 @@ void layout_N_superlay(int N, const struct super_layout *superlay, struct layout
     struct layout *l0 = tlay + sgl->index0;
     struct layout *l1 = tlay + sgl->index1;
     int off0, off1;
-    int N2 = N*N;
+    int MN = M*N;
     switch (sgl->corner0) {
       case NW: off0 = 0; break;
-      case NE: off0 = N*(N-1); break;
-      case SW: off0 = N2*(N2-N); break;
-      case SE: off0 = N2*(N2-N) + N*(N-1); break;
+      case NE: off0 = N*(M-1); break;
+      case SW: off0 = MN*(M*(N-1)); break;
+      case SE: off0 = MN*(M*(N-1)) + N*(M-1); break;
     }
     off0 += tnc * sgl->index0;
     switch (sgl->corner1) {
       case NW: off1 = 0; break;
-      case NE: off1 = N*(N-1); break;
-      case SW: off1 = N2*(N2-N); break;
-      case SE: off1 = N2*(N2-N) + N*(N-1); break;
+      case NE: off1 = N*(M-1); break;
+      case SW: off1 = MN*(M*(N-1)); break;
+      case SE: off1 = MN*(M*(N-1)) + N*(M-1); break;
     }
     off1 += tnc * sgl->index1;
 
-    for (m=0; m<N; m++) {
+    for (m=0; m<M; m++) {
       for (n=0; n<N; n++) {
         int ic0, ic1;
         int q;
         struct cell *c0, *c1;
-        ic0 = off0 + m*N2 + n;
-        ic1 = off1 + m*N2 + n;
+        ic0 = off0 + m*MN + n;
+        ic1 = off1 + m*MN + n;
         c0 = lay->cells + ic0;
         c1 = lay->cells + ic1;
         /* Copy 2ary cell's groups into 1ary cell's table. */
@@ -275,6 +281,7 @@ void layout_N_superlay(int N, const struct super_layout *superlay, struct layout
         /* Merge cell names */
         sprintf(buffer, "%s/%s", c0->name, c1->name);
         c0->name = strdup(buffer);
+        c0->is_overlap = 1;
         /* For each group c1 is in, change the index to point to c0 */
         for (q=0; q<3; q++) {
           int r;

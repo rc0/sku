@@ -47,9 +47,7 @@ void layout_MxN(int M, int N, struct layout *lay) /*{{{*/
   lay->nc = MN*MN;
   lay->prows = MN + (N-1);
   lay->pcols = MN + (M-1);
-  if (MN == 8) {
-    lay->symbols = symbols_8;
-  } else if (MN == 9) {
+  if (MN <= 9) {
     lay->symbols = symbols_9;
   } else if (MN == 12) {
     lay->symbols = symbols_12;
@@ -87,6 +85,7 @@ void layout_MxN(int M, int N, struct layout *lay) /*{{{*/
           lay->groups[MN*(row) + col] = ic;
           lay->groups[MN*(MN+col) + row] = ic;
           lay->groups[MN*(2*MN+block) + N*j + n] = ic;
+          lay->cells[ic].is_overlap = 0;
         }
       }
     }
@@ -103,15 +102,20 @@ void layout_MxN(int M, int N, struct layout *lay) /*{{{*/
   }
 
   lay->n_thinlines = (MN - M) + (MN - N);
-  lay->n_thicklines = (M + 1) + (N + 1);
+  lay->n_mediumlines = (M + 1) + (N + 1) - 4;
+  lay->n_thicklines = 4;
   lay->thinlines = new_array(struct dline, lay->n_thinlines);
+  lay->mediumlines = new_array(struct dline, lay->n_mediumlines);
   lay->thicklines = new_array(struct dline, lay->n_thicklines);
-  m = n = 0;
+  j = m = n = 0;
   for (i=0; i<MN+1; i++) {
     struct dline *d;
     /* horizontals */
-    if ((i%M) == 0) {
-      d = lay->thicklines + n;
+    if ((i==0) || (i==MN)) {
+      d = lay->thicklines + j;
+      j++;
+    } else if ((i%M) == 0) {
+      d = lay->mediumlines + n;
       n++;
     } else {
       d = lay->thinlines + m;
@@ -120,8 +124,11 @@ void layout_MxN(int M, int N, struct layout *lay) /*{{{*/
     d->x0 = 0, d->x1 = MN;
     d->y0 = d->y1 = i;
     /* verticals */
-    if ((i%N) == 0) {
-      d = lay->thicklines + n;
+    if ((i==0) || (i==MN)) {
+      d = lay->thicklines + j;
+      j++;
+    } else if ((i%N) == 0) {
+      d = lay->mediumlines + n;
       n++;
     } else {
       d = lay->thinlines + m;

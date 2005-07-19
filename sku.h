@@ -12,6 +12,7 @@
 struct cell {
   char *name;           /* cell name for verbose + debug output. */
   int index;            /* self-index (to track reordering during geographical sort.) */
+  int is_overlap;
   short prow, pcol;     /* coordinates for printing to text output */
   short rrow, rcol;     /* raw coordinates for printing to formatted output (SVG etc) */
   short sy180, sy90;    /* indices of cells that are 180/90 deg away clockwise (-1 for none) */
@@ -37,6 +38,8 @@ struct layout {
   /* For generating the lines on the formatted output. */
   int n_thinlines;
   struct dline *thinlines;
+  int n_mediumlines;
+  struct dline *mediumlines;
   int n_thicklines;
   struct dline *thicklines;
 
@@ -96,7 +99,7 @@ extern void superlayout_5(struct super_layout *superlay);
 extern void superlayout_8(struct super_layout *superlay);
 extern void superlayout_9(struct super_layout *superlay);
 extern void superlayout_11(struct super_layout *superlay);
-extern void layout_N_superlay(int N, const struct super_layout *superlay, struct layout *lay);
+extern void layout_MxN_superlay(int M, int N, const struct super_layout *superlay, struct layout *lay);
 
 /* In layout_nxn.c */
 extern void layout_NxN(int N, struct layout *lay);

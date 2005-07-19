@@ -5,7 +5,7 @@ PROG := sku
 OBJ := sku.o \
 	solve.o blank.o display.o util.o \
 	infer.o \
-	genlayout.o layout_nxn.o layout_mxn.o superlayout.o \
+	genlayout.o layout_mxn.o superlayout.o \
 	reduce.o \
 	svg.o \
 	reader.o \
@@ -19,4 +19,7 @@ $(PROG) : $(OBJ)
 
 clean:
 	-rm -f *.o $(PROG)
+
+.PHONY: clean
+
 

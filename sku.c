@@ -80,6 +80,7 @@ static void pose(struct layout *lay)/*{{{*/
 }
 /*}}}*/
 
+#if 0
 static void discover(int options)/*{{{*/
 {
   /* Experimental code...  Look for cases that have unambiguous solutions, but
@@ -132,6 +133,7 @@ static void discover(int options)/*{{{*/
   } while (1);
 }
 /*}}}*/
+#endif
 
 int main (int argc, char **argv)/*{{{*/
 {
@@ -146,7 +148,9 @@ int main (int argc, char **argv)/*{{{*/
     OP_REDUCE,    /* Remove givens until it's no longer possible without
                      leaving an ambiguous puzzle. */
     OP_SOLVE,
+#if 0
     OP_DISCOVER,
+#endif
     OP_MARK,
     OP_FORMAT
   } operation;
@@ -183,8 +187,10 @@ int main (int argc, char **argv)/*{{{*/
       options |= OPT_SYM_180 | OPT_SYM_90;
     } else if (!strncmp(*argv, "-m", 2)) {
       iters_for_min = atoi(*argv + 2);
+#if 0
     } else if (!strcmp(*argv, "-d")) {
       operation = OP_DISCOVER;
+#endif
     } else if (!strncmp(*argv, "-L", 2)) {
       /* Only needed for 'blank' mode now. */
       layout_name = *argv + 2;
@@ -221,9 +227,11 @@ int main (int argc, char **argv)/*{{{*/
         blank(lay);
         break;
       }
+#if 0
     case OP_DISCOVER:
       discover(options);
       break;
+#endif
     case OP_MARK:
       mark_cells(grey_cells, options);
       break;

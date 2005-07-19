@@ -49,8 +49,6 @@ void format_output(int options)/*{{{*/
          "id=\"defs3\" />\n");
   printf("<g id=\"layer1\">\n");
 
-  format_emit_lines(lay->n_thinlines, lay->thinlines, 1.0);
-  format_emit_lines(lay->n_thicklines, lay->thicklines, 3.0);
   for (i=0; i<lay->nc; i++) {
     if (state[i] == -2) {
       /* greyed out cell */
@@ -66,8 +64,15 @@ void format_output(int options)/*{{{*/
       y = offset + scale * ((double) lay->cells[i].rrow + 0.3);
       printf("<text style=\"font-size:9;font-style:normal;font-variant:normal;font-weight:bold;fill:#000;fill-opacity:1.0;stroke:none;font-family:Luxi Sans;text-anchor:middle;writing-mode:lr-tb\"\n");
       printf("x=\"%f\" y=\"%f\">%c</text>\n", x, y, grey_sym++);
+    }
+  }
 
-    } else if (state[i] >= 0) {
+  format_emit_lines(lay->n_thinlines, lay->thinlines, 0.5);
+  format_emit_lines(lay->n_mediumlines, lay->mediumlines, 1.5);
+  format_emit_lines(lay->n_thicklines, lay->thicklines, 3.0);
+
+  for (i=0; i<lay->nc; i++) {
+    if (state[i] >= 0) {
       double x, y;
         x = offset + scale * ((double) lay->cells[i].rcol + 0.5);
         y = offset + scale * ((double) lay->cells[i].rrow + 0.8);

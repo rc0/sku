@@ -345,23 +345,27 @@ try_next_symbol:
     if (!did_something) {
 
       if (options & OPT_SPECULATE) {
-        int min_poss, index_min;
         /* Have to speculate and recurse.
-         * TODO : ought to pick a cell with the lowest number of possibilities and iterate
-         * over those?*/
+         * ?*/
         int ic;
         int n_solutions, n_sol;
         n_solutions = 0;
-        index_min = -1;
-        min_poss = lay->ns + 1;
+        /* Try to find an overlap cell first, otherwise -a mode on a multi-grid
+         * takes forever */
         for (ic=0; ic<lay->nc; ic++) {
-          int nposs = count_bits(poss[ic]);
-          if ((nposs > 0) && (nposs < min_poss)) {
-            min_poss = nposs;
-            index_min = ic;
+          if (lay->cells[ic].is_overlap) {
+            int nposs = count_bits(poss[ic]);
+            if (nposs > 0) break;
           }
         }
-        if (index_min >= 0) {
+        if (ic == lay->nc) {
+          /* Failed to find an overlap cell, now just take any. */
+          for (ic=0; ic<lay->nc; ic++) {
+            int nposs = count_bits(poss[ic]);
+            if (nposs > 0) break;
+          }
+        }
+        if (ic < lay->nc) {
           int *solution, *scratch;
           int i, mask;
           int start_point;
@@ -373,13 +377,13 @@ try_next_symbol:
           for (i=0; i<lay->ns; i++) {
             ii = (start_point + i) % lay->ns;
             mask = 1<<ii;
-            if (mask & poss[index_min]) {
+            if (mask & poss[ic]) {
               if (options & OPT_VERBOSE) {
                 fprintf(stderr, "Speculate <%s> is <%c>\n",
-                    lay->cells[index_min].name, lay->symbols[ii]);
+                    lay->cells[ic].name, lay->symbols[ii]);
               }
               memcpy(scratch, state, lay->nc * sizeof(int));
-              scratch[index_min] = ii;
+              scratch[ic] = ii;
               n_sol = infer(lay, scratch, order, iter, solvepos, options);
               if (n_sol > 0) {
                 memcpy(solution, scratch, lay->nc * sizeof(int));
@@ -397,6 +401,8 @@ try_next_symbol:
           memcpy(state, solution, lay->nc * sizeof(int));
           free(solution);
           return n_solutions;
+        } else {
+          return 0;
         }
       } else {
         return 0;
