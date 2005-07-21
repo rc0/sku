@@ -12,73 +12,7 @@
 #include "sku.h"
 
 /* ============================================================================ */
-/* ============================================================================ */
 
-static void pose(struct layout *lay)/*{{{*/
-{
-  int *state, *copy, *answer;
-  int *keep;
-  int i;
-  int ok;
-  int tally;
-
-  state = new_array(int, lay->nc);
-  copy = new_array(int, lay->nc);
-  answer = new_array(int, lay->nc);
-  keep = new_array(int, lay->nc);
-
-  for (i=0; i<lay->nc; i++) {
-    state[i] = -1;
-    keep[i] = 0;
-  }
-
-  if (1 != infer(lay, state, NULL, 0, 0, OPT_SPECULATE | OPT_FIRST_ONLY)) {
-    fprintf(stderr, "??? FAILED TO GENERATE AN INITIAL GRID!!\n");
-    exit(1);
-  }
-  /* Must be at least 1 solution if the solver tries hard enough! */
-
-  /* Now remove givens one at a time until we find a minimum number that leaves
-   * a puzzle with a unique solution. */
-  memcpy(answer, state, lay->nc * sizeof(int));
-
-  tally = lay->nc;
-  do {
-    int start_point;
-    start_point = lrand48() % lay->nc;
-    ok = -1;
-    for (i=0; i<lay->nc; i++) {
-      int ii;
-      int n_sol;
-      ii = (i + start_point) % lay->nc;
-      if (state[ii] < 0) continue;
-      if (keep[ii] == 1) continue;
-      memcpy(copy, state, lay->nc * sizeof(int));
-      copy[ii] = -1;
-      n_sol = infer(lay, copy, NULL, 0, 0, OPT_STOP_ON_2);
-      tally--;
-      if (n_sol == 1) {
-        ok = ii;
-        break;
-      } else {
-        /* If it's no good removing this given now, it won't be any better to try
-         * removing it again later... */
-        fprintf(stderr, "%4d :  (can't remove given from <%s>)\n", tally, lay->cells[ii].name);
-        keep[ii] = 1;
-      }
-    }
-
-    if (ok >= 0) {
-      fprintf(stderr, "%4d : Removing given from <%s>\n", tally, lay->cells[ok].name);
-      state[ok] = -1;
-    }
-  } while (ok >= 0);
-
-  display(stdout, lay, state);
-
-  return;
-}
-/*}}}*/
 
 #if 0
 static void discover(int options)/*{{{*/
@@ -139,7 +73,6 @@ int main (int argc, char **argv)/*{{{*/
 {
   int options;
   int seed;
-  int N = 3;
   int iters_for_min = 0;
   int grey_cells = 0;
   enum operation {

@@ -1,9 +1,5 @@
 #include "sku.h"
 
-const static char symbols_8[8] = {/*{{{*/
-  '1', '2', '3', '4', '5', '6', '7', '8'
-};
-/*}}}*/
 const static char symbols_9[9] = {/*{{{*/
   '1', '2', '3', '4', '5', '6', '7', '8', '9'
 };
@@ -53,7 +49,7 @@ void layout_MxN(int M, int N, struct layout *lay) /*{{{*/
     lay->symbols = symbols_12;
   } else if (MN == 16) {
     lay->symbols = symbols_16;
-  } else if (MN == 5) {
+  } else if (MN == 25) {
     lay->symbols = symbols_25;
   } else {
     fprintf(stderr, "No symbol table for MxN=%d\n", MN);

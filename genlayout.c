@@ -121,6 +121,18 @@ struct layout *genlayout(const char *name)/*{{{*/
   } else if (!strcmp(name, "4/5")) {
     superlayout_5(&superlay);
     layout_MxN_superlay(4, 4, &superlay, result);
+  } else if (!strcmp(name, "4/9")) {
+    superlayout_9(&superlay);
+    layout_MxN_superlay(4, 4, &superlay, result);
+  } else if (!strcmp(name, "4/11")) {
+    superlayout_11(&superlay);
+    layout_MxN_superlay(4, 4, &superlay, result);
+  } else if (!strcmp(name, "5/5")) {
+    superlayout_5(&superlay);
+    layout_MxN_superlay(5, 5, &superlay, result);
+  } else if (!strcmp(name, "5/8")) {
+    superlayout_8(&superlay);
+    layout_MxN_superlay(5, 5, &superlay, result);
   } else if (!strcmp(name, "24/5")) {
     superlayout_5(&superlay);
     layout_MxN_superlay(2, 4, &superlay, result);

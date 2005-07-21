@@ -219,7 +219,6 @@ void layout_MxN_superlay(int M, int N, const struct super_layout *superlay, stru
   lay->thinlines = new_array(struct dline, lay->n_thinlines);
   
   for (i=0; i<nsg; i++) {
-    void *addr;
     memcpy(lay->group_names + (tng * i),
            tlay[i].group_names,
            sizeof(char*) * tng);
@@ -246,9 +245,7 @@ void layout_MxN_superlay(int M, int N, const struct super_layout *superlay, stru
   for (i=0; i<superlay->n_links; i++) {
     struct subgrid_link *sgl = superlay->links + i;
     int m, n;
-    struct layout *l0 = tlay + sgl->index0;
-    struct layout *l1 = tlay + sgl->index1;
-    int off0, off1;
+    int off0=-1, off1=-1;
     int MN = M*N;
     switch (sgl->corner0) {
       case NW: off0 = 0; break;

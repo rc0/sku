@@ -25,7 +25,7 @@ void format_output(int options)/*{{{*/
 {
   int *state;
   double scale, offset;
-  int i, j, k, n;
+  int i;
   struct layout *lay;
   char grey_sym = 'A';
 

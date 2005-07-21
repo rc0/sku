@@ -3,7 +3,6 @@
 void solve(int options)/*{{{*/
 {
   int *state;
-  int i;
   int n_solutions;
   struct layout *lay;
 
@@ -28,7 +27,6 @@ void solve(int options)/*{{{*/
 void solve_any(int options)/*{{{*/
 {
   int *state;
-  int i;
   int n_solutions;
   struct layout *lay;
 

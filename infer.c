@@ -1,6 +1,471 @@
 #include "sku.h"
 
-static inline void allocate(struct layout *lay, int *state, int *poss, int *todo, int *order, int ic, int val, int *solvepos)/*{{{*/
+/* ============================================================================ */
+
+struct queue/*{{{*/
+{
+  int ri;       /* read cursor */
+  int wi;       /* write cursor */
+  int n1;       /* n1=n+1; sizeof(slots)=n1, sizeof(flags)=n */
+  int *slots;   /* ring buffer containing queue */
+  int *flags;   /* flags indicating which groups are in the queue (avoid multiple entries) */
+};
+/*}}}*/
+static inline int empty_p(struct queue *q)/*{{{*/
+{
+  if (q->ri == q->wi)
+    return 1;
+  else
+    return 0;
+}
+/*}}}*/
+static struct queue *mk_queue(int n)/*{{{*/
+{
+  struct queue *result;
+  result = new(struct queue);
+  result->slots = new_array(int, 1+n);
+  result->flags = new_array(int, n);
+  result->n1 = n+1;
+  result->ri = result->wi = 0;
+  memset(result->flags, 0, n * sizeof(int));
+  return result;
+}
+/*}}}*/
+static void rm_queue(struct queue *q)/*{{{*/
+{
+  free(q->slots);
+  free(q->flags);
+  free(q);
+}
+/*}}}*/
+static void enqueue(struct queue *q, int x)/*{{{*/
+{
+  if (q->flags[x]) return; /* Already in queue */
+#if 0
+  fprintf(stderr, "    ENQ %d wi=%d\n", x, q->wi);
+#endif
+  q->slots[q->wi] = x;
+  q->flags[x] = 1;
+  ++q->wi;
+  if (q->wi == q->n1) q->wi = 0;
+  if (empty_p(q)) {
+    fprintf(stderr, "Queue has overflowed\n");
+    exit(1);
+  }
+}
+/*}}}*/
+static int dequeue(struct queue *q)/*{{{*/
+{
+  if (empty_p(q)) {
+    return -1;
+  } else {
+    int result = q->slots[q->ri];
+    ++q->ri;
+    if (q->ri == q->n1) q->ri = 0;
+    if (q->flags[result] == 0) {
+      fprintf(stderr, "Flag table out of sync\n");
+      exit(1);
+    }
+    q->flags[result] = 0;
+    return result;
+  }
+}
+/*}}}*/
+
+/* ============================================================================ */
+
+/* Rewrite */
+/*{{{ requeue_groups() */
+static void
+requeue_groups(struct layout *lay,
+               struct queue *scan_q,
+               int ic)
+{
+  int i;
+  struct cell *cell = lay->cells + ic;
+  for (i=0; i<NDIM; i++) {
+    int gi = cell->group[i];
+    if (gi >= 0) enqueue(scan_q, gi);
+    else break;
+  }
+}
+  /*}}}*/
+
+
+/*{{{ allocate() */
+static void
+allocate(struct layout *lay,
+         int *state,
+         int *poss,
+         int *todo,
+         struct queue *scan_q,
+         int *order,
+         int *solvepos,
+         int ic,
+         int val)
+{
+  int mask;
+  int j, k;
+  int NS;
+  short *base;
+
+  state[ic] = val;
+  poss[ic] = 0;
+  if (order) {
+    order[ic] = (*solvepos)++;
+  }
+
+  mask = 1<<val;
+  NS = lay->ns;
+
+  for (k=0; k<NDIM; k++) {
+    int gg = lay->cells[ic].group[k];
+    if (gg >= 0) {
+      todo[gg] &= ~mask;
+#if 0
+      fprintf(stderr, "  1. enqueue %s\n", lay->group_names[gg]);
+#endif
+      enqueue(scan_q, gg);
+      base = lay->groups + gg*NS;
+      for (j=0; j<NS; j++) {
+        int jc;
+        jc = base[j];
+        if (poss[jc] & mask) {
+          poss[jc] &= ~mask;
+          requeue_groups(lay, scan_q, jc);
+        }
+      }
+    } else {
+      break;
+    }
+  }
+}
+/*}}}*/
+/*{{{ do_group() */
+static int
+do_group(int gi,
+         struct layout *lay,
+         int *state,
+         int *poss,
+         int *todo,
+         struct queue *scan_q,
+         int *order,
+         int *solvepos,
+         int *n_todo,
+         int options)
+{
+  /* Return 0 if something went wrong, 1 if it's OK. */
+
+  int NS;
+  short *base;
+  int sym, mask;
+  int t;
+  int found_any = 0;
+
+  t = todo[gi];
+#if 0
+  fprintf(stderr, "Run group %s, todo=%04x\n",
+      lay->group_names[gi], t);
+#endif
+  /* Group will get enqueued when the final symbol is allocated; we can exit
+   * right away when it next gets scanned. */
+  if (t == 0) return 1;
+  NS = lay->ns;
+  base = lay->groups + gi*NS;
+  for (sym=0; sym<NS; sym++) {
+    mask = 1<<sym;
+    if (t & mask) {
+      int j, count, xic;
+      xic = -1;
+      count = 0;
+      for (j=0; j<NS; j++) {
+        int ic = base[j];
+        if (poss[ic] & mask) {
+          xic = ic;
+          count++;
+          if (count > 1) break;
+        }
+      }
+      if (count == 0) {
+        return 0;
+      } else if (count == 1) {
+        if (options & OPT_VERBOSE) {
+          fprintf(stderr, "Allocate <%c> to <%s> (allocate in <%s>)\n",
+              lay->symbols[sym], lay->cells[xic].name, lay->group_names[gi]);
+        }
+        --*n_todo;
+        allocate(lay, state, poss, todo, scan_q, order, solvepos, xic, sym);
+        found_any = 1;
+      }
+    }
+  }
+
+  if (!found_any) {
+    /* Couldn't do any allocates in the group.
+     * So try the more sophisticated analysis:
+     * Analyse the group to find out which subset of cells can contain
+     * each unallocated symbol.  If this subset is also a subset of some other
+     * group, we can eliminate the symbol as a possibility from the rest of
+     * that other group.
+     */
+    int NC, NG;
+    char *flags;
+    int *counts;
+    int sym;
+    int n_poss_cells;
+    short *base;
+
+    NC = lay->nc;
+    NG = lay->ng;
+    flags = new_array(char, NC);
+    counts = new_array(int, NG);
+
+    base = lay->groups + gi*NS;
+    for (sym=0; sym<NS; sym++) {
+      int mask = (1 << sym);
+      if (todo[gi] & mask) {
+        int j;
+        memset(flags, 0, NC);
+        memset(counts, 0, NG*sizeof(int));
+        n_poss_cells = 0;
+        for (j=0; j<NS; j++) {
+          int ic = base[j];
+          if (poss[ic] & mask) {
+            int m;
+            ++n_poss_cells;
+            flags[ic] = 1;
+            for (m=0; m<NDIM; m++) {
+              int gm = lay->cells[ic].group[m];
+              if (gm >= 0) {
+                if (gm != gi) ++counts[gm];
+              } else {
+                break;
+              }
+            }
+          }
+        }
+        for (j=0; j<NG; j++) {
+          if (counts[j] == n_poss_cells) {
+            int m;
+            short *base = lay->groups + j*NS;
+            for (m=0; m<NS; m++) {
+              int ic = base[m];
+              if (!flags[ic]) { /* cell not in the original group. */
+                if (poss[ic] & mask) {
+                  if (options & OPT_VERBOSE) {
+                    fprintf(stderr, "Removing <%c> from <%s> (in <%s> due to placement of <%c> in <%s>)\n",
+                        lay->symbols[sym], lay->cells[ic].name, lay->group_names[j],
+                        lay->symbols[sym], lay->group_names[gi]);
+                  }
+                  poss[ic] &= ~mask;
+                  requeue_groups(lay, scan_q, ic);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    free(counts);
+    free(flags);
+  }
+  
+  return 1; /* Success */
+}
+/*}}}*/
+/*{{{ do_uniques() */
+static int
+do_uniques(struct layout *lay,
+           int *state,
+           int *poss,
+           int *todo,
+           struct queue *scan_q,
+           int *order,
+           int *solvepos,
+           int *n_todo,
+           int options)
+{
+  int ic;
+  int NC;
+  int nb;
+  NC = lay->nc;
+  for (ic=0; ic<NC; ic++) {
+    if (state[ic] < 0) {
+      nb = count_bits(poss[ic]);
+      if (nb == 0) {
+        return 0;
+      } else if (nb == 1) {
+        int sym = decode(poss[ic]);
+        if (options & OPT_VERBOSE) {
+          fprintf(stderr, "Allocate <%c> to <%s> (only option)\n",
+              lay->symbols[sym], lay->cells[ic].name);
+        }
+        --*n_todo;
+        allocate(lay, state, poss, todo, scan_q, order, solvepos, ic, sym);
+      }
+    }
+  }
+  return 1;
+}
+/*}}}*/
+/*{{{ select_minimal_cell() */
+static int
+select_minimal_cell(struct layout *lay,
+                    int *state,
+                    int *poss,
+                    int in_overlap)
+{
+  int ic;
+  int minbits;
+  int i;
+  minbits = lay->ns + 1;
+  ic = -1;
+  for (i=0; i<lay->nc; i++) {
+    if (!in_overlap || lay->cells[i].is_overlap) {
+      if (state[i] < 0) {
+        int nb = count_bits(poss[i]);
+        if (nb < minbits) {
+          minbits = nb;
+          ic = i;
+        }
+      }
+    }
+  }
+  return ic;
+}
+/*}}}*/
+static int
+speculate(struct layout *lay,
+          int *state,
+          int *poss,
+          int *order,
+          int solvepos,
+          int options)
+{
+  /* Called when all else fails and we have to guess a cell but be able to back
+   * out the guess if it goes wrong. */
+  int ic;
+  int start_point;
+  int i;
+  int NS, NC;
+  int *scratch, *solution;
+  int n_sol, total_n_sol;
+
+  ic = select_minimal_cell(lay, state, poss, 1);
+  if (ic < 0) {
+    ic = select_minimal_cell(lay, state, poss, 0);
+  }
+  if (ic < 0) {
+    return 0;
+  }
+
+  NS = lay->ns;
+  NC = lay->nc;
+  scratch = new_array(int, NC);
+  solution = new_array(int, NC);
+  start_point = lrand48() % NS;
+  total_n_sol = 0;
+  for (i=0; i<NS; i++) {
+    int ii = (i + start_point) % NS;
+    int mask = 1<<ii;
+    if (mask & poss[ic]) {
+      memcpy(scratch, state, NC * sizeof(int));
+      scratch[ic] = ii;
+      n_sol = infer(lay, scratch, order, 0, solvepos, options);
+      if (n_sol > 0) {
+        memcpy(solution, scratch, NC * sizeof(int));
+        total_n_sol += n_sol;
+        if (options & OPT_FIRST_ONLY) break;
+      }
+      if ((options & OPT_STOP_ON_2) && (total_n_sol >= 2)) break;
+    }
+  }
+  free(scratch);
+  memcpy(state, solution, NC * sizeof(int));
+  free(solution);
+  return total_n_sol;
+}
+
+int infer(struct layout *lay, int *state, int *order, int iter, int solvepos, int options)/*{{{*/
+{
+  int *todo;
+  int *poss;
+  struct queue *scan_q;
+  int NC, NG, NS;
+  int FILL;
+  int i;
+  int n_todo; /* Number of cells still to solve for. */
+  int gi;
+  int result;
+
+  NC = lay->nc;
+  NG = lay->ng;
+  NS = lay->ns;
+
+  scan_q = mk_queue(NG);
+  todo = new_array(int, NG);
+  poss = new_array(int, NC);
+
+  FILL = (1 << NS) - 1;
+  n_todo = 0;
+  for (i=0; i<NG; i++) {
+    todo[i] = FILL;
+  }
+  for (i=0; i<NC; i++) {
+    poss[i] = FILL;
+  }
+  for (i=0; i<NC; i++) {
+    if (state[i] >= 0) {
+      /* This will clear the poss bits on cells in the same groups, remove todo
+       * bits, and enqueue groups that need scanning immediately at the start
+       * of the search. */
+      allocate(lay, state, poss, todo, scan_q, NULL, NULL, i, state[i]);
+    } else {
+      n_todo++;
+    }
+  }
+
+  while (1) {
+    while ((gi = dequeue(scan_q)) >= 0) {
+      if (!do_group(gi, lay, state, poss, todo, scan_q, order, &solvepos, &n_todo, options)) {
+        result = 0;
+        goto get_out;
+      }
+    }
+    if (!do_uniques(lay, state, poss, todo, scan_q, order, &solvepos, &n_todo, options)) {
+      result = 0;
+      goto get_out;
+    }
+
+    if (empty_p(scan_q)) break;
+  }
+
+  if (n_todo == 0) {
+    result = 1;
+  } else if (n_todo > 0) {
+    /* Didn't get a solution - decide whether to speculate or not. */
+    if (options & OPT_SPECULATE) {
+      result = speculate(lay, state, poss, order, solvepos, options);
+    } else {
+      result = 0;
+    }
+  } else {
+    fprintf(stderr, "n_todo became negative\n");
+    exit(1);
+  }
+
+get_out:
+  rm_queue(scan_q);
+  free(todo);
+  free(poss);
+  return result;
+  
+}
+/*}}}*/
+/* ============================================================================ */
+#if 0
+static inline void old_allocate(struct layout *lay, int *state, int *poss, int *todo, int *order, int ic, int val, int *solvepos)/*{{{*/
 {
   int mask;
   int k;
@@ -23,7 +488,7 @@ static inline void allocate(struct layout *lay, int *state, int *poss, int *todo
 }
 /*}}}*/
 /* ============================================================================ */
-int infer(struct layout *lay, int *state, int *order, int iter, int solvepos, int options)/*{{{*/
+int old_infer(struct layout *lay, int *state, int *order, int iter, int solvepos, int options)/*{{{*/
 {
   /*
    * n : number of symbols to solve for (=size of each cell group)
@@ -413,3 +878,4 @@ try_next_symbol:
   }
 }
 /*}}}*/
+#endif

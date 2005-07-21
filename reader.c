@@ -34,8 +34,8 @@ void read_grid(struct layout **lay, int **state)/*{{{*/
   }
   rmap['*'] = -2;
   for (i=0; i<my_lay->ns; i++) {
-    rmap[my_lay->symbols[i]] = i;
-    valid[my_lay->symbols[i]] = 1;
+    rmap[(int) my_lay->symbols[i]] = i;
+    valid[(int) my_lay->symbols[i]] = 1;
   }
   valid['.'] = 1;
   valid['*'] = 1;

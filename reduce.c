@@ -181,9 +181,6 @@ void reduce(int iters_for_min, int options)/*{{{*/
 {
   int *state;
   int *result;
-  int i;
-  int ok;
-  int tally;
   int kept_givens = 0;
   struct layout *lay;
 

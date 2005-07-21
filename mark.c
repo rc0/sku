@@ -28,7 +28,6 @@ void mark_cells(int grey_cells, int options)/*{{{*/
   read_grid(&lay, &state);
 
   if (grey_cells > 0) {
-    int max_order;
     order = new_array(int, lay->nc);
     copy = new_array(int, lay->nc);
     memcpy(copy, state, lay->nc * sizeof(int));

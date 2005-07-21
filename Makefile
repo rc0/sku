@@ -1,5 +1,5 @@
 CC := gcc
-CFLAGS := -O2
+CFLAGS := -O2 -Wall
 
 PROG := sku
 OBJ := sku.o \
