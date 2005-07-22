@@ -207,6 +207,7 @@ void layout_MxN_superlay(int M, int N, const struct super_layout *superlay, stru
   lay->symbols = tlay[0].symbols;
   lay->group_names = new_array(char *, lay->ng);
   lay->groups = new_array(short, lay->ng*lay->ns);
+  lay->is_block = new_array(char, lay->ng);
 
   /* This is oversized to start with - we just don't use the tail end of it later on. */
   lay->cells  = new_array(struct cell, tnc * nsg);
@@ -225,6 +226,9 @@ void layout_MxN_superlay(int M, int N, const struct super_layout *superlay, stru
     memcpy(lay->groups + (tng * tns * i),
            tlay[i].groups,
            sizeof(short) * tng * tns);
+    memcpy(lay->is_block + (tng * i),
+           tlay[i].is_block,
+           sizeof(char) * tng);
     memcpy(lay->cells + (tnc * i),
            tlay[i].cells,
            sizeof(struct cell) * tnc);

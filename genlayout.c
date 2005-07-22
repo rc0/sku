@@ -84,66 +84,58 @@ void debug_layout(struct layout *lay)/*{{{*/
   }
 }
 /*}}}*/
+
+static void parse_mn(const char *x, int len, int *M, int *N)/*{{{*/
+{
+  switch (len) {
+    case 1:
+      *M = *N = x[0] - '0';
+      break;
+    case 2:
+      *M = x[0] - '0';
+      *N = x[1] - '0';
+      break;
+    default:
+      fprintf(stderr, "Can't parse rows and columns from %s\n", x);
+      exit(1);
+      break;
+  }
+}
+/*}}}*/
+static void make_super(const char *x, struct super_layout *superlay)/*{{{*/
+{
+  if (!strcmp(x, "5")) {
+    superlayout_5(superlay);
+  } else if (!strcmp(x, "8")) {
+    superlayout_8(superlay);
+  } else if (!strcmp(x, "9")) {
+    superlayout_9(superlay);
+  } else if (!strcmp(x, "11")) {
+    superlayout_11(superlay);
+  } else {
+    fprintf(stderr, "Unknown superlayout %s\n", x);
+    exit(1);
+  }
+}
+/*}}}*/
 struct layout *genlayout(const char *name)/*{{{*/
 {
   struct layout *result;
   struct super_layout superlay;
+  const char *slash;
+  int M, N;
+
   result = new(struct layout);
 
-  if (!strcmp(name, "2")) {
-    layout_MxN(2, 2, result);
-  } else if (!strcmp(name, "3")) {
-    layout_MxN(3, 3, result);
-  } else if (!strcmp(name, "4")) {
-    layout_MxN(4, 4, result);
-  } else if (!strcmp(name, "5")) {
-    layout_MxN(5, 5, result);
-  } else if (!strcmp(name, "23")) {
-    layout_MxN(2, 3, result);
-  } else if (!strcmp(name, "24")) {
-    layout_MxN(2, 4, result);
-  } else if (!strcmp(name, "26")) {
-    layout_MxN(2, 6, result);
-  } else if (!strcmp(name, "34")) {
-    layout_MxN(3, 4, result);
-  } else if (!strcmp(name, "3/5")) {
-    superlayout_5(&superlay);
-    layout_MxN_superlay(3, 3, &superlay, result);
-  } else if (!strcmp(name, "3/8")) {
-    superlayout_8(&superlay);
-    layout_MxN_superlay(3, 3, &superlay, result);
-  } else if (!strcmp(name, "3/9")) {
-    superlayout_9(&superlay);
-    layout_MxN_superlay(3, 3, &superlay, result);
-  } else if (!strcmp(name, "3/11")) {
-    superlayout_11(&superlay);
-    layout_MxN_superlay(3, 3, &superlay, result);
-  } else if (!strcmp(name, "4/5")) {
-    superlayout_5(&superlay);
-    layout_MxN_superlay(4, 4, &superlay, result);
-  } else if (!strcmp(name, "4/9")) {
-    superlayout_9(&superlay);
-    layout_MxN_superlay(4, 4, &superlay, result);
-  } else if (!strcmp(name, "4/11")) {
-    superlayout_11(&superlay);
-    layout_MxN_superlay(4, 4, &superlay, result);
-  } else if (!strcmp(name, "5/5")) {
-    superlayout_5(&superlay);
-    layout_MxN_superlay(5, 5, &superlay, result);
-  } else if (!strcmp(name, "5/8")) {
-    superlayout_8(&superlay);
-    layout_MxN_superlay(5, 5, &superlay, result);
-  } else if (!strcmp(name, "24/5")) {
-    superlayout_5(&superlay);
-    layout_MxN_superlay(2, 4, &superlay, result);
-  } else if (!strcmp(name, "34/5")) {
-    superlayout_5(&superlay);
-    layout_MxN_superlay(3, 4, &superlay, result);
+  slash = strchr(name, '/');
+  if (slash) {
+    parse_mn(name, slash-name, &M, &N);
+    make_super(slash+1, &superlay);
+    layout_MxN_superlay(M, N, &superlay, result);
   } else {
-    fprintf(stderr, "Unrecognized layout name <%s>\n", name);
-    exit(1);
+    parse_mn(name, strlen(name), &M, &N);
+    layout_MxN(M, N, result);
   }
-
   result->name = strdup(name);
   return result;
 }

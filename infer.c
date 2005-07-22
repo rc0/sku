@@ -162,6 +162,9 @@ do_group(int gi,
   int t;
   int found_any = 0;
 
+  /* Don't continue if it's a row or column and we don't want that */
+  if ((options & OPT_NO_ROWCOL_ALLOC) && (lay->is_block[gi] == 0)) return 1;
+
   t = todo[gi];
 #if 0
   fprintf(stderr, "Run group %s, todo=%04x\n",
@@ -200,7 +203,7 @@ do_group(int gi,
     }
   }
 
-  if (!found_any) {
+  if (!found_any && !(options & OPT_NO_SUBSETTING)) {
     /* Couldn't do any allocates in the group.
      * So try the more sophisticated analysis:
      * Analyse the group to find out which subset of cells can contain
@@ -253,9 +256,9 @@ do_group(int gi,
               if (!flags[ic]) { /* cell not in the original group. */
                 if (poss[ic] & mask) {
                   if (options & OPT_VERBOSE) {
-                    fprintf(stderr, "Removing <%c> from <%s> (in <%s> due to placement of <%c> in <%s>)\n",
-                        lay->symbols[sym], lay->cells[ic].name, lay->group_names[j],
-                        lay->symbols[sym], lay->group_names[gi]);
+                    fprintf(stderr, "Removing <%c> from <%s> (in <%s> due to placement in <%s>)\n",
+                        lay->symbols[sym], lay->cells[ic].name,
+                        lay->group_names[j], lay->group_names[gi]);
                   }
                   poss[ic] &= ~mask;
                   requeue_groups(lay, scan_q, ic);
@@ -335,6 +338,7 @@ select_minimal_cell(struct layout *lay,
   return ic;
 }
 /*}}}*/
+/*{{{ speculate() */
 static int
 speculate(struct layout *lay,
           int *state,
@@ -386,7 +390,7 @@ speculate(struct layout *lay,
   free(solution);
   return total_n_sol;
 }
-
+/*}}}*/
 int infer(struct layout *lay, int *state, int *order, int iter, int solvepos, int options)/*{{{*/
 {
   int *todo;
@@ -433,9 +437,11 @@ int infer(struct layout *lay, int *state, int *order, int iter, int solvepos, in
         goto get_out;
       }
     }
-    if (!do_uniques(lay, state, poss, todo, scan_q, order, &solvepos, &n_todo, options)) {
-      result = 0;
-      goto get_out;
+    if (!(options & OPT_NO_UNIQUES)) {
+      if (!do_uniques(lay, state, poss, todo, scan_q, order, &solvepos, &n_todo, options)) {
+        result = 0;
+        goto get_out;
+      }
     }
 
     if (empty_p(scan_q)) break;

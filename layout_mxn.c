@@ -4,11 +4,6 @@ const static char symbols_9[9] = {/*{{{*/
   '1', '2', '3', '4', '5', '6', '7', '8', '9'
 };
 /*}}}*/
-const static char symbols_12[12] = {/*{{{*/
-  '0', '1', '2', '3', '4', '5', '6', '7',
-  '8', '9', 'A', 'B',
-};
-/*}}}*/
 const static char symbols_16[16] = {/*{{{*/
   '0', '1', '2', '3', '4', '5', '6', '7',
   '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'
@@ -36,18 +31,17 @@ void layout_MxN(int M, int N, struct layout *lay) /*{{{*/
   int i, j, m, n;
   int k;
   int MN = M*N;
+  int NC, NG, NS;
   char buffer[32];
 
-  lay->ns = MN;
-  lay->ng = 3*MN;
-  lay->nc = MN*MN;
+  lay->ns = NS = MN;
+  lay->ng = NG = 3*MN;
+  lay->nc = NC = MN*MN;
   lay->prows = MN + (N-1);
   lay->pcols = MN + (M-1);
   if (MN <= 9) {
     lay->symbols = symbols_9;
-  } else if (MN == 12) {
-    lay->symbols = symbols_12;
-  } else if (MN == 16) {
+  } else if (MN <= 16) {
     lay->symbols = symbols_16;
   } else if (MN == 25) {
     lay->symbols = symbols_25;
@@ -56,7 +50,8 @@ void layout_MxN(int M, int N, struct layout *lay) /*{{{*/
     exit(1);
   }
   lay->cells = new_array(struct cell, lay->nc);
-  lay->groups = new_array(short, (3*MN)*MN);
+  lay->groups = new_array(short, NG * NS);
+  lay->is_block = new_array(char, NG);
   for (i=0; i<N; i++) {
     for (j=0; j<M; j++) {
       int row = M*i+j;
@@ -91,10 +86,13 @@ void layout_MxN(int M, int N, struct layout *lay) /*{{{*/
     char buffer[32];
     sprintf(buffer, "row-%c", 'A' + i);
     lay->group_names[i] = strdup(buffer);
+    lay->is_block[i] = 0;
     sprintf(buffer, "col-%d", 1 + i);
     lay->group_names[i+MN] = strdup(buffer);
+    lay->is_block[i+MN] = 0;
     sprintf(buffer, "blk-%c%d", 'A' + M*(i/M), 1 + N*(i%M));
     lay->group_names[i+2*MN] = strdup(buffer);
+    lay->is_block[i+2*MN] = 1;
   }
 
   lay->n_thinlines = (MN - M) + (MN - N);

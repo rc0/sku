@@ -99,7 +99,7 @@ int inner_reduce(struct layout *lay, int *state, int options)/*{{{*/
       if (options & OPT_SPECULATE) {
         n_sol = infer(lay, copy, NULL, 0, 0, OPT_SPECULATE);
       } else {
-        n_sol = infer(lay, copy, NULL, 0, 0, OPT_STOP_ON_2);
+        n_sol = infer(lay, copy, NULL, 0, 0, (options & OPT_MAKE_EASIER) | OPT_STOP_ON_2);
       }
       tally--;
       if (n_sol == 1) {
@@ -205,10 +205,14 @@ void reduce(int iters_for_min, int options)/*{{{*/
       kept_givens = inner_reduce(lay, copy, options);
       if (kept_givens < min_givens) {
         min_givens = kept_givens;
-        fprintf(stderr, "Found a layout with %d givens\n", kept_givens);
-        display(stderr, lay, copy);
+        if (options & OPT_VERBOSE) {
+          fprintf(stderr, "Found a layout with %d givens\n", kept_givens);
+          display(stderr, lay, copy);
+        }
+        /* The result always has to have the minimum number of givens found so
+         * far. */
+        memcpy(result, copy, lay->nc * sizeof(int));
       }
-      memcpy(result, copy, lay->nc * sizeof(int));
     }
     display(stdout, lay, result);
   }

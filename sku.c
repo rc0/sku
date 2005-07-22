@@ -13,61 +13,36 @@
 
 /* ============================================================================ */
 
-
-#if 0
-static void discover(int options)/*{{{*/
+static void usage(void)
 {
-  /* Experimental code...  Look for cases that have unambiguous solutions, but
-   * where the solver still has to speculate to find the solution.  Print out
-   * the solution as far as it can get, so we can work out what inference
-   * approach it is lacking.  */
-
-  struct layout lay;
-  int *state, *copy, *copy2;
-  int i;
-  int n_solutions;
-  int min_n_givens;
-
-  layout_NxN(3, &lay);
-  state = new_array(int, lay.nc);
-  copy = new_array(int, lay.nc);
-  copy2 = new_array(int, lay.nc);
-  for (i=0; i<lay.nc; i++) {
-    state[i] = -1;
-  }
-  n_solutions = infer(&lay, state, NULL, 0, 0, OPT_SPECULATE | OPT_FIRST_ONLY | options);
-  if (n_solutions == 0) {
-    fprintf(stderr, "oops, couldn't find a solution at the start!!\n");
-    exit(1);
-  }
-  fprintf(stderr, "Complete puzzle:\n");
-  display(stderr, &lay, state);
-
-  min_n_givens = 81;
-  do {
-    int n_givens1, n_givens2;
-    memcpy(copy, state, lay.nc * sizeof(int));
-    n_givens1 = inner_reduce(&lay, copy, 0);
-    memcpy(copy2, copy, lay.nc * sizeof(int));
-    n_givens2 = inner_reduce(&lay, copy, OPT_SPECULATE);
-    if (n_givens1 > n_givens2) {
-      fprintf(stderr, "Puzzle is :\n");
-      display(stderr, &lay, copy);
-      fprintf(stderr, "Solvable puzzle is :\n");
-      display(stderr, &lay, copy2);
-      n_solutions = infer(&lay, copy, NULL, 0, 0, OPT_VERBOSE);
-      fprintf(stderr, "Can get this far without guessing:\n");
-      display(stdout, &lay, copy);
-      exit(0);
-    }
-    if (n_givens1 < min_n_givens) {
-      min_n_givens = n_givens1;
-    }
-    fprintf(stderr, "n_givens = %d   min = %d\n", n_givens1, min_n_givens);
-  } while (1);
+  fprintf(stderr,
+      "General options:\n"
+      "  -v                 : verbose\n"
+      "\n"
+      "With no option, solve a puzzle\n"
+      "  -f                 : if puzzle has >1 solution, only find the first\n"
+      "  -s                 : use speculation if logic fails to complete the grid\n"
+      "\n"
+      "-b<layout>           : create a blank grid with named <layout>\n"
+      "\n"
+      "-a                   : complete a grid\n"
+      "\n"
+      "-r                   : reduce to minimum no. of givens\n"
+      "  -Eb                : only do allocation on rectangles (not rows & columns)\n"
+      "  -Es                : don't do subsetting analysis to remove possibilities\n"
+      "  -Eu                : don't handle squares with a unique symbol left\n"
+      "  -y                 : require 180 degree rotational symmetry\n"
+      "  -yy                : require 90,180,270 degree rotational symmetry\n"
+      "  -s                 : allow solutions that require speculation to solve\n"
+      "  -m<number>         : try <number> times to find a puzzle with a smallest number of givens\n"
+      "\n"
+      "-k<number>           : mark <number> empty squares in grey\n"
+      "\n"
+      "-F                   : format output as SVG\n"
+      );
 }
-/*}}}*/
-#endif
+
+/* ============================================================================ */
 
 int main (int argc, char **argv)/*{{{*/
 {
@@ -81,9 +56,6 @@ int main (int argc, char **argv)/*{{{*/
     OP_REDUCE,    /* Remove givens until it's no longer possible without
                      leaving an ambiguous puzzle. */
     OP_SOLVE,
-#if 0
-    OP_DISCOVER,
-#endif
     OP_MARK,
     OP_FORMAT
   } operation;
@@ -93,16 +65,24 @@ int main (int argc, char **argv)/*{{{*/
 
   options = 0;
   while (++argv, --argc) {
-    if (!strcmp(*argv, "-v")) {
-      options |= OPT_VERBOSE;
-    } else if (!strcmp(*argv, "-f")) {
-      options |= OPT_FIRST_ONLY;
-    } else if (!strcmp(*argv, "-b")) {
-      operation = OP_BLANK;
+    if (!strcmp(*argv, "-h") || !strcmp(*argv, "-help") || !strcmp(*argv, "--help")) {
+      usage();
+      exit(0);
     } else if (!strcmp(*argv, "-a")) {
       operation = OP_ANY;
-    } else if (!strcmp(*argv, "-r")) {
-      operation = OP_REDUCE;
+    } else if (!strncmp(*argv, "-b", 2)) {
+      operation = OP_BLANK;
+      layout_name = *argv + 2;
+    } else if (!strcmp(*argv, "-Eb")) {
+      options |= OPT_NO_ROWCOL_ALLOC;
+    } else if (!strcmp(*argv, "-Es")) {
+      options |= OPT_NO_SUBSETTING;
+    } else if (!strcmp(*argv, "-Eu")) {
+      options |= OPT_NO_UNIQUES;
+    } else if (!strcmp(*argv, "-f")) {
+      options |= OPT_FIRST_ONLY;
+    } else if (!strcmp(*argv, "-F")) {
+      operation = OP_FORMAT;
     } else if (!strncmp(*argv, "-k", 2)) {
       operation = OP_MARK;
       if ((*argv)[2] == 0) {
@@ -110,23 +90,18 @@ int main (int argc, char **argv)/*{{{*/
       } else {
         grey_cells = atoi(*argv + 2);
       }
+    } else if (!strncmp(*argv, "-m", 2)) {
+      iters_for_min = atoi(*argv + 2);
+    } else if (!strcmp(*argv, "-r")) {
+      operation = OP_REDUCE;
     } else if (!strcmp(*argv, "-s")) {
       options |= OPT_SPECULATE;
-    } else if (!strcmp(*argv, "-F")) {
-      operation = OP_FORMAT;
+    } else if (!strcmp(*argv, "-v")) {
+      options |= OPT_VERBOSE;
     } else if (!strcmp(*argv, "-y")) {
       options |= OPT_SYM_180;
     } else if (!strcmp(*argv, "-yy")) {
       options |= OPT_SYM_180 | OPT_SYM_90;
-    } else if (!strncmp(*argv, "-m", 2)) {
-      iters_for_min = atoi(*argv + 2);
-#if 0
-    } else if (!strcmp(*argv, "-d")) {
-      operation = OP_DISCOVER;
-#endif
-    } else if (!strncmp(*argv, "-L", 2)) {
-      /* Only needed for 'blank' mode now. */
-      layout_name = *argv + 2;
     } else {
       fprintf(stderr, "Unrecognized argument <%s>\n", *argv);
       exit(1);
@@ -142,11 +117,6 @@ int main (int argc, char **argv)/*{{{*/
     case OP_SOLVE:
       solve(options);
       break;
-#if 0
-    case OP_POSE:
-      pose(&lay);
-      break;
-#endif
     case OP_ANY:
       solve_any(options);
       break;
@@ -156,7 +126,7 @@ int main (int argc, char **argv)/*{{{*/
     case OP_BLANK:
       {
         struct layout *lay;
-        lay = genlayout(layout_name ? layout_name : "3");
+        lay = genlayout(*layout_name ? layout_name : "3");
         blank(lay);
         break;
       }

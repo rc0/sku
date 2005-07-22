@@ -16,6 +16,7 @@ struct cell {
   short prow, pcol;     /* coordinates for printing to text output */
   short rrow, rcol;     /* raw coordinates for printing to formatted output (SVG etc) */
   short sy180, sy90;    /* indices of cells that are 180/90 deg away clockwise (-1 for none) */
+  short isym;           /* index of next cell in same symmetry group (circular ring) */
   short group[NDIM];    /* table of groups the cell is in (-1 for unused dimensions) */
 };
 
@@ -45,6 +46,7 @@ struct layout {
 
   const char *symbols;        /* [ns] table of the symbols */
   struct cell *cells;   /* [nc] table of cell definitions */
+  char *is_block;       /* 1 flag per group: is it one of the MxN mini-rectangle groups (1) or a row/col (0) */
   short *groups;        /* [ng*ns] table of cell indices in each of the groups */
   char **group_names;    /* [ng] array of strings. */
 };
@@ -82,6 +84,11 @@ struct super_layout {
 #define OPT_SPECULATE (1<<3)
 #define OPT_SYM_180 (1<<4)
 #define OPT_SYM_90 (1<<5)
+#define OPT_NO_SUBSETTING (1<<6)
+#define OPT_NO_ROWCOL_ALLOC (1<<7)
+#define OPT_NO_UNIQUES (1<<8)
+
+#define OPT_MAKE_EASIER (OPT_NO_SUBSETTING | OPT_NO_ROWCOL_ALLOC | OPT_NO_UNIQUES)
 
 /* ============================================================================ */
 
