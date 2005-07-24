@@ -17,7 +17,7 @@ const static char symbols_25[25] = {/*{{{*/
   'V', 'W', 'X', 'Y', 'Z'
 };
 /*}}}*/
-void layout_MxN(int M, int N, struct layout *lay) /*{{{*/
+void layout_MxN(int M, int N, struct layout *lay, int options) /*{{{*/
 {
   /* This function is REQUIRED to return the cells in raster scan order.
    * Obviously this is necessary for the grid reader, but it's also
@@ -132,6 +132,6 @@ void layout_MxN(int M, int N, struct layout *lay) /*{{{*/
     d->y0 = 0, d->y1 = MN;
   }
 
-  find_symmetries(lay);
+  find_symmetries(lay, options);
 }
 /*}}}*/

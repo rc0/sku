@@ -190,6 +190,10 @@ do_group(int gi,
         }
       }
       if (count == 0) {
+        if (options & OPT_VERBOSE) {
+          fprintf(stderr, "Cannot allocate <%c> in <%s>\n",
+              lay->symbols[sym], lay->group_names[gi]);
+        }
         return 0;
       } else if (count == 1) {
         if (options & OPT_VERBOSE) {
@@ -297,6 +301,7 @@ do_uniques(struct layout *lay,
     if (state[ic] < 0) {
       nb = count_bits(poss[ic]);
       if (nb == 0) {
+        fprintf(stderr, "Cell <%s> has no options left\n", lay->cells[ic].name);
         return 0;
       } else if (nb == 1) {
         int sym = decode(poss[ic]);

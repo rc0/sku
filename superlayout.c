@@ -141,7 +141,7 @@ static void fixup_lines(int n, struct dline *d, int xoff, int yoff)/*{{{*/
   }
 }
 /*}}}*/
-void layout_MxN_superlay(int M, int N, const struct super_layout *superlay, struct layout *lay)/*{{{*/
+void layout_MxN_superlay(int M, int N, const struct super_layout *superlay, struct layout *lay, int options)/*{{{*/
 {
   struct layout *tlay;
   int nsg;
@@ -155,7 +155,7 @@ void layout_MxN_superlay(int M, int N, const struct super_layout *superlay, stru
   nsg = superlay->n_subgrids;
   tlay = new_array(struct layout, nsg);
   for (i=0; i<nsg; i++) {
-    layout_MxN(M, N, tlay + i);
+    layout_MxN(M, N, tlay + i, options);
   }
 
   /* Relabel and reindex the tables. */
@@ -339,7 +339,7 @@ void layout_MxN_superlay(int M, int N, const struct super_layout *superlay, stru
   ++lay->prows;
   ++lay->pcols;
 
-  find_symmetries(lay);
+  find_symmetries(lay, options);
 
 }
 /*}}}*/

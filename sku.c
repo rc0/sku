@@ -33,6 +33,8 @@ static void usage(void)
       "  -Eu                : don't handle squares with a unique symbol left\n"
       "  -y                 : require 180 degree rotational symmetry\n"
       "  -yy                : require 90,180,270 degree rotational symmetry\n"
+      "  -yh                : require horizontal reflective symmetry\n"
+      "  -yv                : require vertical reflective symmetry\n"
       "  -s                 : allow solutions that require speculation to solve\n"
       "  -m<number>         : try <number> times to find a puzzle with a smallest number of givens\n"
       "\n"
@@ -102,6 +104,10 @@ int main (int argc, char **argv)/*{{{*/
       options |= OPT_SYM_180;
     } else if (!strcmp(*argv, "-yy")) {
       options |= OPT_SYM_180 | OPT_SYM_90;
+    } else if (!strcmp(*argv, "-yh")) {
+      options |= OPT_SYM_HORIZ;
+    } else if (!strcmp(*argv, "-yv")) {
+      options |= OPT_SYM_VERT;
     } else {
       fprintf(stderr, "Unrecognized argument <%s>\n", *argv);
       exit(1);
@@ -126,7 +132,7 @@ int main (int argc, char **argv)/*{{{*/
     case OP_BLANK:
       {
         struct layout *lay;
-        lay = genlayout(*layout_name ? layout_name : "3");
+        lay = genlayout(*layout_name ? layout_name : "3", options);
         blank(lay);
         break;
       }

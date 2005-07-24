@@ -15,7 +15,6 @@ struct cell {
   int is_overlap;
   short prow, pcol;     /* coordinates for printing to text output */
   short rrow, rcol;     /* raw coordinates for printing to formatted output (SVG etc) */
-  short sy180, sy90;    /* indices of cells that are 180/90 deg away clockwise (-1 for none) */
   short isym;           /* index of next cell in same symmetry group (circular ring) */
   short group[NDIM];    /* table of groups the cell is in (-1 for unused dimensions) */
 };
@@ -84,9 +83,12 @@ struct super_layout {
 #define OPT_SPECULATE (1<<3)
 #define OPT_SYM_180 (1<<4)
 #define OPT_SYM_90 (1<<5)
-#define OPT_NO_SUBSETTING (1<<6)
-#define OPT_NO_ROWCOL_ALLOC (1<<7)
-#define OPT_NO_UNIQUES (1<<8)
+#define OPT_SYM_HORIZ (1<<6)
+#define OPT_SYM_VERT (1<<7)
+
+#define OPT_NO_SUBSETTING (1<<10)
+#define OPT_NO_ROWCOL_ALLOC (1<<11)
+#define OPT_NO_UNIQUES (1<<12)
 
 #define OPT_MAKE_EASIER (OPT_NO_SUBSETTING | OPT_NO_ROWCOL_ALLOC | OPT_NO_UNIQUES)
 
@@ -106,21 +108,18 @@ extern void superlayout_5(struct super_layout *superlay);
 extern void superlayout_8(struct super_layout *superlay);
 extern void superlayout_9(struct super_layout *superlay);
 extern void superlayout_11(struct super_layout *superlay);
-extern void layout_MxN_superlay(int M, int N, const struct super_layout *superlay, struct layout *lay);
-
-/* In layout_nxn.c */
-extern void layout_NxN(int N, struct layout *lay);
+extern void layout_MxN_superlay(int M, int N, const struct super_layout *superlay, struct layout *lay, int options);
 
 /* In layout_mxn.c */
-extern void layout_MxN(int M, int N, struct layout *lay);
+extern void layout_MxN(int M, int N, struct layout *lay, int options);
 
 /* In genlayout.c */
-extern void find_symmetries(struct layout *lay);
+extern void find_symmetries(struct layout *lay, int options);
 extern void debug_layout(struct layout *lay);
-extern struct layout *genlayout(const char *name);
+extern struct layout *genlayout(const char *name, int options);
 
 /* In reader.c */
-extern void read_grid(struct layout **lay, int **state);
+extern void read_grid(struct layout **lay, int **state, int options);
 
 /* In blank.c */
 extern void blank(struct layout *lay);

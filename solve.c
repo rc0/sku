@@ -6,7 +6,7 @@ void solve(int options)/*{{{*/
   int n_solutions;
   struct layout *lay;
 
-  read_grid(&lay, &state);
+  read_grid(&lay, &state, options);
   n_solutions = infer(lay, state, NULL, 0, 0, options);
 
   if (n_solutions == 0) {
@@ -30,7 +30,7 @@ void solve_any(int options)/*{{{*/
   int n_solutions;
   struct layout *lay;
 
-  read_grid(&lay, &state);
+  read_grid(&lay, &state, options);
   n_solutions = infer(lay, state, NULL, 0, 0, OPT_SPECULATE | OPT_FIRST_ONLY | options);
 
   if (n_solutions == 0) {

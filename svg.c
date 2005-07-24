@@ -29,7 +29,7 @@ void format_output(int options)/*{{{*/
   struct layout *lay;
   char grey_sym = 'A';
 
-  read_grid(&lay, &state);
+  read_grid(&lay, &state, options);
 
   scale = 72.27 / 2.54;
   offset = 2.0 * scale;

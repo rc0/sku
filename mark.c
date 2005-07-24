@@ -25,7 +25,7 @@ void mark_cells(int grey_cells, int options)/*{{{*/
   int i, j, k, n;
   struct layout *lay;
 
-  read_grid(&lay, &state);
+  read_grid(&lay, &state, options);
 
   if (grey_cells > 0) {
     order = new_array(int, lay->nc);

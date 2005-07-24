@@ -9,7 +9,7 @@ static void chomp(char *x)/*{{{*/
   }
 }
 /*}}}*/
-void read_grid(struct layout **lay, int **state)/*{{{*/
+void read_grid(struct layout **lay, int **state, int options)/*{{{*/
 {
   int rmap[256];
   int valid[256];
@@ -24,7 +24,7 @@ void read_grid(struct layout **lay, int **state)/*{{{*/
     exit(1);
   }
 
-  my_lay = genlayout(buffer + 9);
+  my_lay = genlayout(buffer + 9, options);
   *state = new_array(int, my_lay->nc);
   
 

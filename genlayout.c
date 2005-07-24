@@ -21,12 +21,26 @@ static int find_cell_by_yx(struct cell *c, int n, int y, int x)/*{{{*/
   else return -1;
 }
 /*}}}*/
-void find_symmetries(struct layout *lay)/*{{{*/
+static void seek_and_insert(struct layout *lay, int i, int oy, int ox)/*{{{*/
+{
+  int isym = find_cell_by_yx(lay->cells, lay->nc, oy, ox);
+  if (isym >= 0) {
+    struct cell *c, *ci;
+    c = lay->cells + i;
+    ci = lay->cells + isym;
+    if (c->isym < ci->isym) ci->isym = c->isym;
+    else                    c->isym = ci->isym;
+  }
+}
+/*}}}*/
+void find_symmetries(struct layout *lay, int options)/*{{{*/
 {
   int maxy, maxx;
   int i;
+  int NC;
+  NC = lay->nc;
   maxy = maxx = 0;
-  for (i=0; i<lay->nc; i++) {
+  for (i=0; i<NC; i++) {
     int y, x;
     y = lay->cells[i].rrow;
     x = lay->cells[i].rcol;
@@ -36,20 +50,64 @@ void find_symmetries(struct layout *lay)/*{{{*/
 
   /* For searching, we know the cell array is sorted in y-major x-minor order. */
   for (i=0; i<lay->nc; i++) {
+    lay->cells[i].isym = i; /* initial value. */
+  }
+
+  /* TODO : other logic in here to deal with other symmetry modes */
+  for (i=0; i<NC; i++) {
     int y, x, oy, ox;
-    y = lay->cells[i].rrow;
-    x = lay->cells[i].rcol;
+    struct cell *c = lay->cells + i;
+    y = c->rrow;
+    x = c->rcol;
     /* 180 degree symmetry */
-    oy = maxy - y;
-    ox = maxx - x;
-    lay->cells[i].sy180 = find_cell_by_yx(lay->cells, lay->nc, oy, ox);
-    if (maxy == maxx) {
-      /* 90 degree symmetry : nonsensical unless the grid's bounding box is square! */
-      oy = x;
-      ox = maxx - y;
-      lay->cells[i].sy90 = find_cell_by_yx(lay->cells, lay->nc, oy, ox);
-    } else {
-      lay->cells[i].sy90 = -1;
+
+    if (options & OPT_SYM_180) {
+      oy = maxy - y;
+      ox = maxx - x;
+      seek_and_insert(lay, i, oy, ox);
+    }
+
+    if (options & OPT_SYM_90) {
+      if (maxy == maxx) {
+        /* 90 degree symmetry : nonsensical unless the grid's bounding box is square! */
+        oy = x;
+        ox = maxx - y;
+        seek_and_insert(lay, i, oy, ox);
+      }
+    }
+
+    if (options & OPT_SYM_HORIZ) {
+      oy = y;
+      ox = maxx - x;
+      seek_and_insert(lay, i, oy, ox);
+    }
+      
+    if (options & OPT_SYM_VERT) {
+      oy = maxy - y;
+      ox = x;
+      seek_and_insert(lay, i, oy, ox);
+    }
+      
+  }
+
+  /* Now find equivalence classes : by working upwards, everything gets locked
+   * to the lowest index in the same class. */
+  for (i=0; i<NC; i++) {
+    lay->cells[i].isym = lay->cells[lay->cells[i].isym].isym;
+  }
+
+  /* Now generate rings. */
+  for (i=0; i<NC; i++) {
+    if (lay->cells[i].isym == i) { /* root of this class. */
+      int j;
+      int prev = i;
+      for (j=i+1; j<NC; j++) {
+        if (lay->cells[j].isym == i) {
+          lay->cells[prev].isym = j;
+          prev = j;
+        }
+      }
+      lay->cells[prev].isym = i;
     }
   }
 }
@@ -57,6 +115,7 @@ void find_symmetries(struct layout *lay)/*{{{*/
 void debug_layout(struct layout *lay)/*{{{*/
 {
   int i, j;
+  int count;
   for (i=0; i<lay->nc; i++) {
     fprintf(stderr, "%3d : %4d P=(%4d,%4d) R=(%4d,%4d) : %-16s ", 
         i,
@@ -74,11 +133,17 @@ void debug_layout(struct layout *lay)/*{{{*/
         break;
       }
     }
-    if (lay->cells[i].sy180 >= 0) {
-      fprintf(stderr, "  180:%d", lay->cells[i].sy180);
-    }
-    if (lay->cells[i].sy90 >= 0) {
-      fprintf(stderr, "  90:%d", lay->cells[i].sy90);
+    j = lay->cells[i].isym;
+    fprintf(stderr, "  SYM :");
+    count = 0;
+    while (j != i) {
+      fprintf(stderr, " %s", lay->cells[j].name);
+      j = lay->cells[j].isym;
+      count++;
+      if (count > 8) {
+        fprintf(stderr, "\nINFINITE LOOP!\n");
+        exit(1);
+      }
     }
     fprintf(stderr, "\n");
   }
@@ -118,7 +183,7 @@ static void make_super(const char *x, struct super_layout *superlay)/*{{{*/
   }
 }
 /*}}}*/
-struct layout *genlayout(const char *name)/*{{{*/
+struct layout *genlayout(const char *name, int options)/*{{{*/
 {
   struct layout *result;
   struct super_layout superlay;
@@ -131,10 +196,10 @@ struct layout *genlayout(const char *name)/*{{{*/
   if (slash) {
     parse_mn(name, slash-name, &M, &N);
     make_super(slash+1, &superlay);
-    layout_MxN_superlay(M, N, &superlay, result);
+    layout_MxN_superlay(M, N, &superlay, result, options);
   } else {
     parse_mn(name, strlen(name), &M, &N);
-    layout_MxN(M, N, result);
+    layout_MxN(M, N, result, options);
   }
   result->name = strdup(name);
   return result;
