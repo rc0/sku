@@ -29,6 +29,7 @@ static void usage(void)
       "\n"
       "-r                   : reduce to minimum no. of givens\n"
       "  -Eb                : only do allocation on rectangles (not rows & columns)\n"
+      "  -Ec                : don't do clustering analysis to remove possibilities\n"
       "  -Es                : don't do subsetting analysis to remove possibilities\n"
       "  -Eu                : don't handle squares with a unique symbol left\n"
       "  -y                 : require 180 degree rotational symmetry\n"
@@ -59,6 +60,7 @@ int main (int argc, char **argv)/*{{{*/
                      leaving an ambiguous puzzle. */
     OP_SOLVE,
     OP_MARK,
+    OP_GRADE,
     OP_FORMAT
   } operation;
   char *layout_name = NULL;
@@ -77,12 +79,16 @@ int main (int argc, char **argv)/*{{{*/
       layout_name = *argv + 2;
     } else if (!strcmp(*argv, "-Eb")) {
       options |= OPT_NO_ROWCOL_ALLOC;
+    } else if (!strcmp(*argv, "-Ec")) {
+      options |= OPT_NO_CLUSTERING;
     } else if (!strcmp(*argv, "-Es")) {
       options |= OPT_NO_SUBSETTING;
     } else if (!strcmp(*argv, "-Eu")) {
       options |= OPT_NO_UNIQUES;
     } else if (!strcmp(*argv, "-f")) {
       options |= OPT_FIRST_ONLY;
+    } else if (!strcmp(*argv, "-g")) {
+      operation = OP_GRADE;
     } else if (!strcmp(*argv, "-F")) {
       operation = OP_FORMAT;
     } else if (!strncmp(*argv, "-k", 2)) {
@@ -136,11 +142,9 @@ int main (int argc, char **argv)/*{{{*/
         blank(lay);
         break;
       }
-#if 0
-    case OP_DISCOVER:
-      discover(options);
+    case OP_GRADE:
+      grade(options);
       break;
-#endif
     case OP_MARK:
       mark_cells(grey_cells, options);
       break;

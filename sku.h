@@ -89,8 +89,9 @@ struct super_layout {
 #define OPT_NO_SUBSETTING (1<<10)
 #define OPT_NO_ROWCOL_ALLOC (1<<11)
 #define OPT_NO_UNIQUES (1<<12)
+#define OPT_NO_CLUSTERING (1<<13)
 
-#define OPT_MAKE_EASIER (OPT_NO_SUBSETTING | OPT_NO_ROWCOL_ALLOC | OPT_NO_UNIQUES)
+#define OPT_MAKE_EASIER (OPT_NO_SUBSETTING | OPT_NO_ROWCOL_ALLOC | OPT_NO_UNIQUES | OPT_NO_CLUSTERING)
 
 /* ============================================================================ */
 
@@ -137,6 +138,9 @@ extern void reduce(int iters_for_min, int options);
 
 /* In mark.c */
 extern void mark_cells(int grey_cells, int options);
+
+/* In grade.c */
+extern void grade(int options);
   
 /* In svg.c */
 extern void format_output(int options);

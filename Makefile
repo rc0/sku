@@ -1,4 +1,5 @@
 CC := gcc
+#CFLAGS := -O2 -Wall -pg -fprofile-arcs -fno-inline
 CFLAGS := -O2 -Wall
 
 PROG := sku
@@ -9,7 +10,8 @@ OBJ := sku.o \
 	reduce.o \
 	svg.o \
 	reader.o \
-	mark.o
+	mark.o \
+	grade.o
 
 $(PROG) : $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $^
@@ -18,7 +20,7 @@ $(PROG) : $(OBJ)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	-rm -f *.o $(PROG)
+	-rm -f *.o *.gcda *.gcno $(PROG)
 
 .PHONY: clean
 

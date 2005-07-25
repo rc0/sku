@@ -141,43 +141,32 @@ allocate(struct layout *lay,
   }
 }
 /*}}}*/
-/*{{{ do_group() */
+/*{{{ try_group_allocate() */
 static int
-do_group(int gi,
-         struct layout *lay,
-         int *state,
-         int *poss,
-         int *todo,
-         struct queue *scan_q,
-         int *order,
-         int *solvepos,
-         int *n_todo,
-         int options)
+try_group_allocate(int gi,
+    struct layout *lay,
+    int *state,
+    int *poss,
+    int *todo,
+    struct queue *scan_q,
+    int *order,
+    int *solvepos,
+    int *n_todo,
+    int options)
 {
-  /* Return 0 if something went wrong, 1 if it's OK. */
-
+  /* Return 0 if the solution is broken,
+   *        1 if we didn't allocate anything,
+   *        2 if we did. */
   int NS;
   short *base;
   int sym, mask;
-  int t;
   int found_any = 0;
 
-  /* Don't continue if it's a row or column and we don't want that */
-  if ((options & OPT_NO_ROWCOL_ALLOC) && (lay->is_block[gi] == 0)) return 1;
-
-  t = todo[gi];
-#if 0
-  fprintf(stderr, "Run group %s, todo=%04x\n",
-      lay->group_names[gi], t);
-#endif
-  /* Group will get enqueued when the final symbol is allocated; we can exit
-   * right away when it next gets scanned. */
-  if (t == 0) return 1;
   NS = lay->ns;
   base = lay->groups + gi*NS;
   for (sym=0; sym<NS; sym++) {
     mask = 1<<sym;
-    if (t & mask) {
+    if (todo[gi] & mask) {
       int j, count, xic;
       xic = -1;
       count = 0;
@@ -207,77 +196,230 @@ do_group(int gi,
     }
   }
 
-  if (!found_any && !(options & OPT_NO_SUBSETTING)) {
-    /* Couldn't do any allocates in the group.
-     * So try the more sophisticated analysis:
-     * Analyse the group to find out which subset of cells can contain
-     * each unallocated symbol.  If this subset is also a subset of some other
-     * group, we can eliminate the symbol as a possibility from the rest of
-     * that other group.
-     */
-    int NC, NG;
-    char *flags;
-    int *counts;
-    int sym;
-    int n_poss_cells;
-    short *base;
+  return found_any ? 2 : 1;
 
-    NC = lay->nc;
-    NG = lay->ng;
-    flags = new_array(char, NC);
-    counts = new_array(int, NG);
+}
+/*}}}*/
+/*{{{ try_subsetting() */
+static int
+try_subsetting(int gi,
+    struct layout *lay,
+    int *state,
+    int *poss,
+    int *todo,
+    struct queue *scan_q,
+    int *order,
+    int *solvepos,
+    int *n_todo,
+    int options)
+{
+  /* Couldn't do any allocates in the group.
+   * So try the more sophisticated analysis:
+   * Analyse the group to find out which subset of cells can contain
+   * each unallocated symbol.  If this subset is also a subset of some other
+   * group, we can eliminate the symbol as a possibility from the rest of
+   * that other group.
+   */
+  int NC, NS, NG;
+  char *flags;
+  int *counts;
+  int sym;
+  int n_poss_cells;
+  short *base;
+  int did_anything = 0;
 
-    base = lay->groups + gi*NS;
-    for (sym=0; sym<NS; sym++) {
-      int mask = (1 << sym);
-      if (todo[gi] & mask) {
-        int j;
-        memset(flags, 0, NC);
-        memset(counts, 0, NG*sizeof(int));
-        n_poss_cells = 0;
-        for (j=0; j<NS; j++) {
-          int ic = base[j];
-          if (poss[ic] & mask) {
-            int m;
-            ++n_poss_cells;
-            flags[ic] = 1;
-            for (m=0; m<NDIM; m++) {
-              int gm = lay->cells[ic].group[m];
-              if (gm >= 0) {
-                if (gm != gi) ++counts[gm];
-              } else {
-                break;
-              }
+  NS = lay->ns;
+  NC = lay->nc;
+  NG = lay->ng;
+  flags = new_array(char, NC);
+  counts = new_array(int, NG);
+
+  base = lay->groups + gi*NS;
+  for (sym=0; sym<NS; sym++) {
+    int mask = (1 << sym);
+    if (todo[gi] & mask) {
+      int j;
+      memset(flags, 0, NC);
+      memset(counts, 0, NG*sizeof(int));
+      n_poss_cells = 0;
+      for (j=0; j<NS; j++) {
+        int ic = base[j];
+        if (poss[ic] & mask) {
+          int m;
+          ++n_poss_cells;
+          flags[ic] = 1;
+          for (m=0; m<NDIM; m++) {
+            int gm = lay->cells[ic].group[m];
+            if (gm >= 0) {
+              if (gm != gi) ++counts[gm];
+            } else {
+              break;
             }
           }
         }
-        for (j=0; j<NG; j++) {
-          if (counts[j] == n_poss_cells) {
-            int m;
-            short *base = lay->groups + j*NS;
-            for (m=0; m<NS; m++) {
-              int ic = base[m];
-              if (!flags[ic]) { /* cell not in the original group. */
-                if (poss[ic] & mask) {
-                  if (options & OPT_VERBOSE) {
-                    fprintf(stderr, "Removing <%c> from <%s> (in <%s> due to placement in <%s>)\n",
-                        lay->symbols[sym], lay->cells[ic].name,
-                        lay->group_names[j], lay->group_names[gi]);
-                  }
-                  poss[ic] &= ~mask;
-                  requeue_groups(lay, scan_q, ic);
+      }
+      for (j=0; j<NG; j++) {
+        if (counts[j] == n_poss_cells) {
+          int m;
+          short *base = lay->groups + j*NS;
+          for (m=0; m<NS; m++) {
+            int ic = base[m];
+            if (!flags[ic]) { /* cell not in the original group. */
+              if (poss[ic] & mask) {
+                if (options & OPT_VERBOSE) {
+                  fprintf(stderr, "Removing <%c> from <%s> (in <%s> due to placement in <%s>)\n",
+                      lay->symbols[sym], lay->cells[ic].name,
+                      lay->group_names[j], lay->group_names[gi]);
                 }
+                poss[ic] &= ~mask;
+                requeue_groups(lay, scan_q, ic);
+                did_anything = 1;
               }
             }
           }
         }
       }
     }
+  }
+  free(counts);
+  free(flags);
+  return did_anything ? 2 : 1;
+}
 
-    free(counts);
-    free(flags);
+/*}}}*/
+/*{{{ try_clusters() */
+static int
+try_clusters(int gi,
+    struct layout *lay,
+    int *state,
+    int *poss,
+    int *todo,
+    struct queue *scan_q,
+    int *order,
+    int *solvepos,
+    int *n_todo,
+    int options)
+{
+  /* 
+   * Deal with this case: suppose the symbols 2,3,5,6 are unallocated within
+   * a group.  Suppose there are two cells
+   *   A that could be 2,3,5
+   *   B that could be 2,3,6
+   * and neither 2 nor 3 could go anywhere else within the group under
+   * analysis.  Then clearly we can eliminate 5 as a possibility on A and 6
+   * as a possibility on B.
+   * */
+
+  int NC, NS, NG;
+  int did_anything = 0;
+  int *intersect, *poss_map;
+  int sym, cell, ci;
+  int fill, mask;
+  short *base;
+
+  NS = lay->ns;
+  NC = lay->nc;
+  NG = lay->ng;
+  intersect = new_array(int, NS);
+  poss_map = new_array(int, NS);
+
+  base = lay->groups + gi*NS;
+  fill = (1 << NS) - 1;
+  
+  for (sym=0; sym<NS; sym++) {
+    intersect[sym] = fill;
+    poss_map[sym] = 0;
+    mask = 1<<sym;
+    for (cell=0; cell<NS; cell++) {
+      ci = base[cell];
+      if (poss[ci] & mask) {
+        intersect[sym] &= poss[ci];
+        poss_map[sym] |= (1<<cell);
+      }
+    }
+  }
+
+  /* Now analyse to look for candidates. */
+  for (sym=0; sym<NS; sym++) {
+    if (count_bits(intersect[sym]) == count_bits(poss_map[sym])) {
+      /* that is a necessary condition... */
+      int sym1;
+      for (sym1=0; sym1<NS; sym1++) {
+        int mask = 1<<sym1;
+        if (sym1 == sym) continue;
+        if (intersect[sym] & mask) {
+          if ((intersect[sym] == intersect[sym1]) &&
+              (poss_map[sym] == poss_map[sym1])) {
+
+          } else {
+            goto examine_next_symbol;
+          }
+        }
+      }
+
+      /* Good subset: */
+      for (cell=0; cell<NS; cell++) {
+        if (poss_map[sym] & (1<<cell)) {
+          int ci = base[cell];
+          if (poss[ci] != intersect[sym]) {
+            if (options & OPT_VERBOSE) {
+              fprintf(stderr, "Removing <");
+              show_symbols_in_set(NS, lay->symbols, poss[ci] & ~intersect[sym]);
+              fprintf(stderr, "> from <%s>, must be one of <", lay->cells[ci].name);
+              show_symbols_in_set(NS, lay->symbols, intersect[sym]);
+              fprintf(stderr, ">\n");
+            }
+            poss[ci] = intersect[sym];
+          }
+        }
+      }
+    }
+examine_next_symbol:
+    (void) 0;
+  }
+
+  free(intersect);
+  free(poss_map);
+  return did_anything ? 2 : 1;
+}
+
+/*}}}*/
+/*{{{ do_group() */
+static int
+do_group(int gi,
+         struct layout *lay,
+         int *state,
+         int *poss,
+         int *todo,
+         struct queue *scan_q,
+         int *order,
+         int *solvepos,
+         int *n_todo,
+         int options)
+{
+  /* Return 0 if something went wrong, 1 if it was OK.  */
+
+  int status;
+
+  /* Don't continue if it's a row or column and we don't want that */
+  if ((options & OPT_NO_ROWCOL_ALLOC) && (lay->is_block[gi] == 0)) return 1;
+
+  /* Group will get enqueued when the final symbol is allocated; we can exit
+   * right away when it next gets scanned. */
+  if (todo[gi] == 0) return 1;
+
+  status = try_group_allocate(gi, lay, state, poss, todo, scan_q, order, solvepos, n_todo, options);
+  if (!status) return status;
+
+  if ((status == 1) && !(options & OPT_NO_CLUSTERING)) {
+    status = try_clusters(gi, lay, state, poss, todo, scan_q, order, solvepos, n_todo, options);
   }
   
+  if ((status == 1) && !(options & OPT_NO_SUBSETTING)) {
+    status = try_subsetting(gi, lay, state, poss, todo, scan_q, order, solvepos, n_todo, options);
+  }
+ 
+  /* Add new infererence techniques here, if status==1 */
   return 1; /* Success */
 }
 /*}}}*/
