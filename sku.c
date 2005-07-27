@@ -27,11 +27,15 @@ static void usage(void)
       "\n"
       "-a                   : complete a grid\n"
       "\n"
+      "-g                   : grade the difficulty of a puzzle\n"
+      "\n"
       "-r                   : reduce to minimum no. of givens\n"
+      "  -E                 : generate an 'easy' puzzle (only needs allocate within blocks)\n"
       "  -Eb                : only do allocation on rectangles (not rows & columns)\n"
       "  -Ec                : don't do clustering analysis to remove possibilities\n"
       "  -Es                : don't do subsetting analysis to remove possibilities\n"
-      "  -Eu                : don't handle squares with a unique symbol left\n"
+      "  -Eq                : don't handle squares with a unique symbol left\n"
+      "  -Eu                : don't do unmatched candidate deletion\n"
       "  -y                 : require 180 degree rotational symmetry\n"
       "  -yy                : require 90,180,270 degree rotational symmetry\n"
       "  -yh                : require horizontal reflective symmetry\n"
@@ -77,14 +81,18 @@ int main (int argc, char **argv)/*{{{*/
     } else if (!strncmp(*argv, "-b", 2)) {
       operation = OP_BLANK;
       layout_name = *argv + 2;
+    } else if (!strcmp(*argv, "-E")) {
+      options |= OPT_MAKE_EASIER;
     } else if (!strcmp(*argv, "-Eb")) {
       options |= OPT_NO_ROWCOL_ALLOC;
     } else if (!strcmp(*argv, "-Ec")) {
       options |= OPT_NO_CLUSTERING;
+    } else if (!strcmp(*argv, "-Eq")) {
+      options |= OPT_NO_UNIQUES;
     } else if (!strcmp(*argv, "-Es")) {
       options |= OPT_NO_SUBSETTING;
     } else if (!strcmp(*argv, "-Eu")) {
-      options |= OPT_NO_UNIQUES;
+      options |= OPT_NO_UCD;
     } else if (!strcmp(*argv, "-f")) {
       options |= OPT_FIRST_ONLY;
     } else if (!strcmp(*argv, "-g")) {

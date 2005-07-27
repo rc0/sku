@@ -370,6 +370,7 @@ try_clusters(int gi,
               fprintf(stderr, ">\n");
             }
             poss[ci] = intersect[sym];
+            requeue_groups(lay, scan_q, ci);
           }
         }
       }
@@ -380,6 +381,95 @@ examine_next_symbol:
 
   free(intersect);
   free(poss_map);
+  return did_anything ? 2 : 1;
+}
+
+/*}}}*/
+/*{{{ try_ucd() */
+static int
+try_ucd(int gi,
+    struct layout *lay,
+    int *state,
+    int *poss,
+    int *todo,
+    struct queue *scan_q,
+    int *order,
+    int *solvepos,
+    int *n_todo,
+    int options)
+{
+  /* 
+   * Deal with this case: suppose the symbols 2,3,5 are unallocated within
+   * a group.  Suppose there are three cells
+   *   A that could be 2,3
+   *   B that could be 2,3
+   *   C that could be 3,5
+   * and neither 2 nor 3 could go anywhere else within the group under
+   * analysis.  Then we can eliminate 3 as an option on C.
+   * */
+
+  int NC, NS, NG;
+  int did_anything = 0;
+  int did_anything_this_iter;
+  int i, ci, j, cj;
+  short *base;
+
+  NS = lay->ns;
+  NC = lay->nc;
+  NG = lay->ng;
+
+  base = lay->groups + gi*NS;
+
+  do {
+    did_anything_this_iter = 0;
+    for (i=0; i<NS-1; i++) {
+      int count;
+      ci = base[i];
+      if (!poss[ci]) continue;
+      count = 1; /* including the 'i' cell!! */
+      for (j=i+1; j<NS; j++) {
+        cj = base[j];
+        if (poss[ci] == poss[cj]) {
+          ++count;
+        }
+      }
+      /* count==1 is a normal allocate done elsewhere! */
+      if ((count > 1) && (count == count_bits(poss[ci]))) {
+        /* got one. */
+        for (j=0; j<NS; j++) {
+          cj = base[j];
+          if ((poss[cj] != poss[ci]) && (poss[cj] & poss[ci])) {
+            did_anything = did_anything_this_iter = 1;
+            if (options & OPT_VERBOSE) {
+              int k, fk;
+              fprintf(stderr, "Removing <");
+              show_symbols_in_set(NS, lay->symbols, poss[cj] & poss[ci]);
+              fprintf(stderr, "> from <%s:", lay->cells[cj].name);
+              show_symbols_in_set(NS, lay->symbols, poss[cj]);
+              fprintf(stderr, ">, because <");
+              show_symbols_in_set(NS, lay->symbols, poss[ci]);
+              fprintf(stderr, "> must be in <");
+              fk = 1;
+              for (k=0; k<NS; k++) {
+                int ck = base[k];
+                if (poss[ck] == poss[ci]) {
+                  if (!fk) {
+                    fprintf(stderr, ",");
+                  }
+                  fk = 0;
+                  fprintf(stderr, "%s", lay->cells[ck].name);
+                }
+              }
+              fprintf(stderr, ">\n");
+            }
+            poss[cj] &= ~poss[ci];
+            requeue_groups(lay, scan_q, cj);
+          }
+        }
+      }
+    }
+  } while (did_anything_this_iter);
+
   return did_anything ? 2 : 1;
 }
 
@@ -411,6 +501,10 @@ do_group(int gi,
   status = try_group_allocate(gi, lay, state, poss, todo, scan_q, order, solvepos, n_todo, options);
   if (!status) return status;
 
+  if ((status == 1) && !(options & OPT_NO_UCD)) {
+    status = try_ucd(gi, lay, state, poss, todo, scan_q, order, solvepos, n_todo, options);
+  }
+ 
   if ((status == 1) && !(options & OPT_NO_CLUSTERING)) {
     status = try_clusters(gi, lay, state, poss, todo, scan_q, order, solvepos, n_todo, options);
   }

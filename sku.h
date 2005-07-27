@@ -90,8 +90,9 @@ struct super_layout {
 #define OPT_NO_ROWCOL_ALLOC (1<<11)
 #define OPT_NO_UNIQUES (1<<12)
 #define OPT_NO_CLUSTERING (1<<13)
+#define OPT_NO_UCD (1<<14)
 
-#define OPT_MAKE_EASIER (OPT_NO_SUBSETTING | OPT_NO_ROWCOL_ALLOC | OPT_NO_UNIQUES | OPT_NO_CLUSTERING)
+#define OPT_MAKE_EASIER (OPT_NO_SUBSETTING | OPT_NO_ROWCOL_ALLOC | OPT_NO_UNIQUES | OPT_NO_CLUSTERING | OPT_NO_UCD)
 
 /* ============================================================================ */
 
