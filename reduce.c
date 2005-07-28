@@ -131,7 +131,8 @@ int inner_reduce(struct layout *lay, int *state, int options)/*{{{*/
   return kept_givens;
 }
 /*}}}*/
-void reduce(int iters_for_min, int options)/*{{{*/
+
+void reduce(int iters_for_min, int options, int req_n)/*{{{*/
 {
   int *state;
   int *result;
@@ -141,7 +142,45 @@ void reduce(int iters_for_min, int options)/*{{{*/
   read_grid(&lay, &state, options);
   result = new_array(int, lay->nc);
 
-  if (iters_for_min == 0) {
+  if (req_n) {
+    int *copy, *copy2;
+    char *grade_req, *min_grade_req;
+    int i;
+    int limit;
+    int found;
+    int mask;
+
+    found = 0;
+    copy = new_array(int, lay->nc);
+    copy2 = new_array(int, lay->nc);
+    limit = 1 << N_SOLVE_OPTIONS;
+    grade_req = new_array(char, limit);
+    min_grade_req = new_array(char, limit);
+    mask = 0;
+    for (i=0; i<N_SOLVE_OPTIONS; i++) {
+      if (req_n & solve_options[i].opt_flag) {
+        mask |= (1<<i);
+      }
+    }
+    do {
+      memcpy(copy, state, lay->nc * sizeof(int));
+      kept_givens = inner_reduce(lay, copy, (options & ~OPT_VERBOSE));
+      found = 1;
+      memcpy(copy2, copy, lay->nc * sizeof(int));
+      grade_find_sol_reqs(lay, copy2, options & ~OPT_VERBOSE, grade_req, min_grade_req);
+      for (i=0; i<limit; i++) {
+        if (grade_req[i]) {
+          if (i & mask) {
+            found = 0;
+            break;
+          }
+        }
+      }
+    } while (!found);
+    display(stdout, lay, copy);
+    free(copy2);
+    free(copy);
+  } else if (iters_for_min == 0) {
     kept_givens = inner_reduce(lay, state, options);
 
     if (options & OPT_VERBOSE) {

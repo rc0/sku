@@ -8,31 +8,24 @@ struct option {
 
 #define N_OPTIONS 5
 
-const static struct option solve_options[N_OPTIONS] = {
-  { OPT_NO_ROWCOL_ALLOC, "Row/col alloc " },
-  { OPT_NO_UNIQUES,      "Uniques       " },
-  { OPT_NO_SUBSETTING,   "Subsetting    " },
-  { OPT_NO_CLUSTERING,   "Clustering    " },
-  { OPT_NO_UCD,          "Unm. cand del." }
+const struct solve_option solve_options[N_SOLVE_OPTIONS] = {/*{{{*/
+  { OPT_NO_LINES,   "Lines" },
+  { OPT_NO_SUBSETS, "Subsets" },
+  { OPT_NO_ONLYOPT, "Only option" },
+  { OPT_NO_NEAR,    "Near stragglers" },
+  { OPT_NO_REMOTE,  "Remote stragglers" }
 };
-
-void grade(int options)
+/*}}}*/
+void grade_find_sol_reqs(struct layout *lay, int *state, int options, char *result, char *min_result)/*{{{*/
 {
-  struct layout *lay;
-  int *state;
   int *copy;
   int limit, i, j;
-  char *result;
-  int count;
-
-  read_grid(&lay, &state, options);
   copy = new_array(int, lay->nc);
-  limit = 1 << N_OPTIONS;
-  result = new_array(char, limit);
+  limit = 1 << N_SOLVE_OPTIONS;
   for (i=0; i<limit; i++) {
     int flags, n_sol;
     flags = 0;
-    for (j=0; j<N_OPTIONS; j++) {
+    for (j=0; j<N_SOLVE_OPTIONS; j++) {
       if (i & (1<<j)) {
         flags |= solve_options[j].opt_flag;
       }
@@ -46,10 +39,41 @@ void grade(int options)
     }
   }
 
+  memcpy(min_result, result, limit * sizeof(char));
+
+  /* Work out the minimal set(s) of techniques that will do. */
+  for (i=0; i<limit; i++) {
+    if (min_result[i]) {
+      for (j=0; j<limit; j++) {
+        if (((i & j) == j) && (i != j)) {
+          min_result[j] = 0;
+        }
+      }
+    }
+  }
+  free(copy);
+}
+/*}}}*/
+void grade(int options)/*{{{*/
+{
+  struct layout *lay;
+  int *state;
+  int *copy;
+  int limit, i, j;
+  char *result, *min_result;
+  int count;
+
+  read_grid(&lay, &state, options);
+  copy = new_array(int, lay->nc);
+  limit = 1 << N_SOLVE_OPTIONS;
+  result = new_array(char, limit);
+  min_result = new_array(char, limit);
+  grade_find_sol_reqs(lay, state, options, result, min_result);
+
   /* Print result. */
-  for (i=0; i<N_OPTIONS; i++) {
+  for (i=0; i<N_SOLVE_OPTIONS; i++) {
     int mask = 1<<i;
-    fprintf(stderr, "%s ", solve_options[i].name);
+    fprintf(stderr, "%-17s ", solve_options[i].name);
     for (j=0; j<limit; j++) {
       if (j & mask) {
         fprintf(stderr, " -");
@@ -59,8 +83,8 @@ void grade(int options)
     }
     fprintf(stderr, "\n");
   }
-  fprintf(stderr, "-------------------------------------------------------------------------------\n");
-  fprintf(stderr, "               ");
+  fprintf(stderr, "----------------------------------------------------------------------------------\n");
+  fprintf(stderr, "                  ");
   for (j=0; j<limit; j++) {
     if (result[j]) {
       fprintf(stderr, " #");
@@ -70,21 +94,11 @@ void grade(int options)
   }
   fprintf(stderr, "\n");
 
-  /* Work out the minimal set(s) of techniques that will do. */
-  for (i=0; i<limit; i++) {
-    if (result[i]) {
-      for (j=0; j<limit; j++) {
-        if (((i & j) == j) && (i != j)) {
-          result[j] = 0;
-        }
-      }
-    }
-  }
 
   fprintf(stderr, "\nMINIMAL OPTIONS TO SOLVE:\n");
   count = 1;
   for (i=0; i<limit; i++) {
-    if (result[i]) {
+    if (min_result[i]) {
       fprintf(stderr, "%4d: ", count++);
       if (i==(limit-1)) {
         fprintf(stderr, " (no special techniques required)\n");
@@ -101,6 +115,8 @@ void grade(int options)
   }
 
   free(result);
+  free(min_result);
   free(copy);
   free(state);
 }
+/*}}}*/

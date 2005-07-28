@@ -200,9 +200,9 @@ try_group_allocate(int gi,
 
 }
 /*}}}*/
-/*{{{ try_subsetting() */
+/*{{{ try_subsets() */
 static int
-try_subsetting(int gi,
+try_subsets(int gi,
     struct layout *lay,
     int *state,
     int *poss,
@@ -287,9 +287,9 @@ try_subsetting(int gi,
 }
 
 /*}}}*/
-/*{{{ try_clusters() */
+/*{{{ try_near_stragglers() */
 static int
-try_clusters(int gi,
+try_near_stragglers(int gi,
     struct layout *lay,
     int *state,
     int *poss,
@@ -385,9 +385,9 @@ examine_next_symbol:
 }
 
 /*}}}*/
-/*{{{ try_ucd() */
+/*{{{ try_remote_stragglers() */
 static int
-try_ucd(int gi,
+try_remote_stragglers(int gi,
     struct layout *lay,
     int *state,
     int *poss,
@@ -492,7 +492,7 @@ do_group(int gi,
   int status;
 
   /* Don't continue if it's a row or column and we don't want that */
-  if ((options & OPT_NO_ROWCOL_ALLOC) && (lay->is_block[gi] == 0)) return 1;
+  if ((options & OPT_NO_LINES) && (lay->is_block[gi] == 0)) return 1;
 
   /* Group will get enqueued when the final symbol is allocated; we can exit
    * right away when it next gets scanned. */
@@ -501,18 +501,18 @@ do_group(int gi,
   status = try_group_allocate(gi, lay, state, poss, todo, scan_q, order, solvepos, n_todo, options);
   if (!status) return status;
 
-  if ((status == 1) && !(options & OPT_NO_UCD)) {
-    status = try_ucd(gi, lay, state, poss, todo, scan_q, order, solvepos, n_todo, options);
+  if ((status == 1) && !(options & OPT_NO_SUBSETS)) {
+    status = try_subsets(gi, lay, state, poss, todo, scan_q, order, solvepos, n_todo, options);
+  }
+
+  if ((status == 1) && !(options & OPT_NO_REMOTE)) {
+    status = try_remote_stragglers(gi, lay, state, poss, todo, scan_q, order, solvepos, n_todo, options);
   }
  
-  if ((status == 1) && !(options & OPT_NO_CLUSTERING)) {
-    status = try_clusters(gi, lay, state, poss, todo, scan_q, order, solvepos, n_todo, options);
+  if ((status == 1) && !(options & OPT_NO_NEAR)) {
+    status = try_near_stragglers(gi, lay, state, poss, todo, scan_q, order, solvepos, n_todo, options);
   }
   
-  if ((status == 1) && !(options & OPT_NO_SUBSETTING)) {
-    status = try_subsetting(gi, lay, state, poss, todo, scan_q, order, solvepos, n_todo, options);
-  }
- 
   /* Add new infererence techniques here, if status==1 */
   return 1; /* Success */
 }
@@ -678,7 +678,7 @@ int infer(struct layout *lay, int *state, int *order, int iter, int solvepos, in
         goto get_out;
       }
     }
-    if (!(options & OPT_NO_UNIQUES)) {
+    if (!(options & OPT_NO_ONLYOPT)) {
       if (!do_uniques(lay, state, poss, todo, scan_q, order, &solvepos, &n_todo, options)) {
         result = 0;
         goto get_out;

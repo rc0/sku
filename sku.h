@@ -86,13 +86,13 @@ struct super_layout {
 #define OPT_SYM_HORIZ (1<<6)
 #define OPT_SYM_VERT (1<<7)
 
-#define OPT_NO_SUBSETTING (1<<10)
-#define OPT_NO_ROWCOL_ALLOC (1<<11)
-#define OPT_NO_UNIQUES (1<<12)
-#define OPT_NO_CLUSTERING (1<<13)
-#define OPT_NO_UCD (1<<14)
+#define OPT_NO_LINES   (1<<10)
+#define OPT_NO_SUBSETS (1<<11)
+#define OPT_NO_ONLYOPT (1<<12)
+#define OPT_NO_NEAR    (1<<13)
+#define OPT_NO_REMOTE  (1<<14)
 
-#define OPT_MAKE_EASIER (OPT_NO_SUBSETTING | OPT_NO_ROWCOL_ALLOC | OPT_NO_UNIQUES | OPT_NO_CLUSTERING | OPT_NO_UCD)
+#define OPT_MAKE_EASIER (OPT_NO_LINES | OPT_NO_SUBSETS | OPT_NO_ONLYOPT | OPT_NO_NEAR | OPT_NO_REMOTE)
 
 /* ============================================================================ */
 
@@ -135,13 +135,22 @@ extern void solve_any(int options);
 
 /* In reduce.c */
 extern int inner_reduce(struct layout *lay, int *state, int options);
-extern void reduce(int iters_for_min, int options);
+extern void reduce(int iters_for_min, int options, int req_n);
 
 /* In mark.c */
 extern void mark_cells(int grey_cells, int options);
 
 /* In grade.c */
 extern void grade(int options);
+extern void grade_find_sol_reqs(struct layout *lay, int *state, int options, char *result, char *min_result);
+
+#define N_SOLVE_OPTIONS 5
+struct solve_option {
+  int opt_flag;
+  const char *name;
+};
+extern const struct solve_option solve_options[N_SOLVE_OPTIONS];
+
   
 /* In svg.c */
 extern void format_output(int options);

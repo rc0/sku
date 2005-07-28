@@ -31,11 +31,11 @@ static void usage(void)
       "\n"
       "-r                   : reduce to minimum no. of givens\n"
       "  -E                 : generate an 'easy' puzzle (only needs allocate within blocks)\n"
-      "  -Eb                : only do allocation on rectangles (not rows & columns)\n"
-      "  -Ec                : don't do clustering analysis to remove possibilities\n"
-      "  -Es                : don't do subsetting analysis to remove possibilities\n"
-      "  -Eq                : don't handle squares with a unique symbol left\n"
-      "  -Eu                : don't do unmatched candidate deletion\n"
+      "  -El                : don't do allocation along lines (only within blocks)\n"
+      "  -En                : don't look for near stragglers\n"
+      "  -Eo                : don't look for squares with only one option left\n"
+      "  -Er                : don't look for remote stragglers\n"
+      "  -Es                : don't do subset analysis\n"
       "  -y                 : require 180 degree rotational symmetry\n"
       "  -yy                : require 90,180,270 degree rotational symmetry\n"
       "  -yh                : require horizontal reflective symmetry\n"
@@ -54,6 +54,7 @@ static void usage(void)
 int main (int argc, char **argv)/*{{{*/
 {
   int options;
+  int reduce_req_n;
   int seed;
   int iters_for_min = 0;
   int grey_cells = 0;
@@ -72,6 +73,8 @@ int main (int argc, char **argv)/*{{{*/
   operation = OP_SOLVE;
 
   options = 0;
+  reduce_req_n = 0;
+
   while (++argv, --argc) {
     if (!strcmp(*argv, "-h") || !strcmp(*argv, "-help") || !strcmp(*argv, "--help")) {
       usage();
@@ -81,18 +84,24 @@ int main (int argc, char **argv)/*{{{*/
     } else if (!strncmp(*argv, "-b", 2)) {
       operation = OP_BLANK;
       layout_name = *argv + 2;
-    } else if (!strcmp(*argv, "-E")) {
-      options |= OPT_MAKE_EASIER;
-    } else if (!strcmp(*argv, "-Eb")) {
-      options |= OPT_NO_ROWCOL_ALLOC;
-    } else if (!strcmp(*argv, "-Ec")) {
-      options |= OPT_NO_CLUSTERING;
-    } else if (!strcmp(*argv, "-Eq")) {
-      options |= OPT_NO_UNIQUES;
-    } else if (!strcmp(*argv, "-Es")) {
-      options |= OPT_NO_SUBSETTING;
-    } else if (!strcmp(*argv, "-Eu")) {
-      options |= OPT_NO_UCD;
+    } else if (!strncmp(*argv, "-E", 2)) {
+      if ((*argv)[2] == 0) {
+        options |= OPT_MAKE_EASIER;
+      } else {
+        const char *p = 2 + *argv;
+        while (*p) {
+          switch (*p) {
+            case 'l': options |= OPT_NO_LINES;   break;
+            case 'n': options |= OPT_NO_NEAR;    break;
+            case 'o': options |= OPT_NO_ONLYOPT; break;
+            case 'r': options |= OPT_NO_REMOTE;  break;
+            case 's': options |= OPT_NO_SUBSETS; break;
+            default: fprintf(stderr, "Can't use %c with -E\n", *p);
+              break;
+          }
+          p++;
+        }
+      }
     } else if (!strcmp(*argv, "-f")) {
       options |= OPT_FIRST_ONLY;
     } else if (!strcmp(*argv, "-g")) {
@@ -110,6 +119,24 @@ int main (int argc, char **argv)/*{{{*/
       iters_for_min = atoi(*argv + 2);
     } else if (!strcmp(*argv, "-r")) {
       operation = OP_REDUCE;
+    } else if (!strncmp(*argv, "-R", 2)) {
+      if ((*argv)[2] == 0) {
+        options |= OPT_MAKE_EASIER;
+      } else {
+        const char *p = 2 + *argv;
+        while (*p) {
+          switch (*p) {
+            case 'l': reduce_req_n |= OPT_NO_LINES;   break;
+            case 'n': reduce_req_n |= OPT_NO_NEAR;    break;
+            case 'o': reduce_req_n |= OPT_NO_ONLYOPT; break;
+            case 'r': reduce_req_n |= OPT_NO_REMOTE;  break;
+            case 's': reduce_req_n |= OPT_NO_SUBSETS; break;
+            default: fprintf(stderr, "Can't use %c with -R\n", *p);
+              break;
+          }
+          p++;
+        }
+      }
     } else if (!strcmp(*argv, "-s")) {
       options |= OPT_SPECULATE;
     } else if (!strcmp(*argv, "-v")) {
@@ -141,7 +168,7 @@ int main (int argc, char **argv)/*{{{*/
       solve_any(options);
       break;
     case OP_REDUCE:
-      reduce(iters_for_min, options);
+      reduce(iters_for_min, options, reduce_req_n);
       break;
     case OP_BLANK:
       {
