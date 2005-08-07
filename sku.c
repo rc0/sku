@@ -51,6 +51,35 @@ static void usage(void)
 
 /* ============================================================================ */
 
+static void apply_level(int level, int *options, int *reduce_req_n)/*{{{*/
+{
+  switch (level) {
+    case 0:
+      *options |= OPT_MAKE_EASIER;
+      break;
+    case 1:
+      *options |= OPT_NO_SUBSETS | OPT_NO_ONLYOPT | OPT_NO_NEAR | OPT_NO_REMOTE;
+      break;
+    case 2:
+      *options |= OPT_NO_NEAR | OPT_NO_REMOTE;
+      *reduce_req_n |= OPT_NO_LINES;
+      break;
+    case 3:
+      *options |= OPT_NO_NEAR | OPT_NO_REMOTE;
+      *reduce_req_n |= OPT_NO_LINES | OPT_NO_SUBSETS | OPT_NO_ONLYOPT;
+      break;
+    case 4:
+      *reduce_req_n |= OPT_NO_LINES | OPT_NO_SUBSETS | OPT_NO_ONLYOPT;
+      break;
+    case 5:
+      *reduce_req_n |= OPT_MAKE_EASIER;
+      break;
+  }
+}
+/*}}}*/
+
+/* ============================================================================ */
+
 int main (int argc, char **argv)/*{{{*/
 {
   int options;
@@ -115,6 +144,10 @@ int main (int argc, char **argv)/*{{{*/
       } else {
         grey_cells = atoi(*argv + 2);
       }
+    } else if (!strncmp(*argv, "-L", 2)) {
+      int level;
+      level = atoi(*argv + 2);
+      apply_level(level, &options, &reduce_req_n);
     } else if (!strncmp(*argv, "-m", 2)) {
       iters_for_min = atoi(*argv + 2);
     } else if (!strcmp(*argv, "-r")) {
@@ -155,6 +188,11 @@ int main (int argc, char **argv)/*{{{*/
     }
   }
 
+  if (options & reduce_req_n) {
+    fprintf(stderr, "You cannot exclude methods and require them too!\n");
+    exit(1);
+  }
+  
   seed = time(NULL) ^ getpid();
   if (options & OPT_VERBOSE) {
     fprintf(stderr, "Seed=%d\n", seed);
