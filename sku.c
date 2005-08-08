@@ -25,6 +25,8 @@ static void usage(void)
       "\n"
       "-b<layout>           : create a blank grid with named <layout>\n"
       "\n"
+      "-H                   : provide a hint (show the next step in the solution of a partial grid)\n"
+      "\n"
       "-a                   : complete a grid\n"
       "\n"
       "-g                   : grade the difficulty of a puzzle\n"
@@ -36,12 +38,13 @@ static void usage(void)
       "  -Eo                : don't look for squares with only one option left\n"
       "  -Er                : don't look for remote stragglers\n"
       "  -Es                : don't do subset analysis\n"
+      "  -m<number>         : try <number> times to find a puzzle with a smallest number of givens\n"
+      "  -s                 : allow solutions that require speculation to solve\n"
+      "  -t                 : allow puzzles with < 2 unknowns in a group\n"
       "  -y                 : require 180 degree rotational symmetry\n"
       "  -yy                : require 90,180,270 degree rotational symmetry\n"
       "  -yh                : require horizontal reflective symmetry\n"
       "  -yv                : require vertical reflective symmetry\n"
-      "  -s                 : allow solutions that require speculation to solve\n"
-      "  -m<number>         : try <number> times to find a puzzle with a smallest number of givens\n"
       "\n"
       "-k<number>           : mark <number> empty squares in grey\n"
       "\n"
@@ -95,6 +98,7 @@ int main (int argc, char **argv)/*{{{*/
     OP_SOLVE,
     OP_MARK,
     OP_GRADE,
+    OP_HINT,
     OP_FORMAT
   } operation;
   char *layout_name = NULL;
@@ -137,6 +141,8 @@ int main (int argc, char **argv)/*{{{*/
       operation = OP_GRADE;
     } else if (!strcmp(*argv, "-F")) {
       operation = OP_FORMAT;
+    } else if (!strcmp(*argv, "-H")) {
+      operation = OP_HINT;
     } else if (!strncmp(*argv, "-k", 2)) {
       operation = OP_MARK;
       if ((*argv)[2] == 0) {
@@ -172,6 +178,8 @@ int main (int argc, char **argv)/*{{{*/
       }
     } else if (!strcmp(*argv, "-s")) {
       options |= OPT_SPECULATE;
+    } else if (!strcmp(*argv, "-t")) {
+      options |= OPT_ALLOW_TRIVIAL;
     } else if (!strcmp(*argv, "-v")) {
       options |= OPT_VERBOSE;
     } else if (!strcmp(*argv, "-y")) {
@@ -201,6 +209,9 @@ int main (int argc, char **argv)/*{{{*/
   switch (operation) {
     case OP_SOLVE:
       solve(options);
+      break;
+    case OP_HINT:
+      solve(options | OPT_HINT | OPT_VERBOSE);
       break;
     case OP_ANY:
       solve_any(options);

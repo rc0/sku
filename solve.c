@@ -10,8 +10,8 @@ void solve(int options)/*{{{*/
   n_solutions = infer(lay, state, NULL, 0, 0, options);
 
   if (n_solutions == 0) {
-    fprintf(stderr, "The puzzle had no solutions\n");
-    return;
+    fprintf(stderr, "The puzzle had no solutions.\n"
+        "Showing how far the solver got before becoming stuck.\n");
   } else if (n_solutions == 1) {
     fprintf(stderr, "The puzzle had precisely 1 solution\n");
 
@@ -34,8 +34,8 @@ void solve_any(int options)/*{{{*/
   n_solutions = infer(lay, state, NULL, 0, 0, OPT_SPECULATE | OPT_FIRST_ONLY | options);
 
   if (n_solutions == 0) {
-    fprintf(stderr, "The puzzle had no solutions\n");
-    return;
+    fprintf(stderr, "The puzzle had no solutions.\n"
+        "Showing how far the solver got before becoming stuck.\n");
   }
 
   display(stdout, lay, state);

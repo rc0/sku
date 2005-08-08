@@ -31,6 +31,31 @@ static int inner_reduce_check_solvable(struct layout *lay, int *state, int optio
   return result;
 }
 /*}}}*/
+static int trivial_p(struct layout *lay, int *state)/*{{{*/
+{
+  int ng, gi, ns;
+  
+  ng = lay->ng;
+  ns = lay->ns;
+  for (gi=0; gi<ng; gi++) {
+    short *base = lay->groups + ns * gi;
+    int n_givens, n_unknowns;
+    int j;
+    n_givens = 0;
+    for (j=0; j<ns; j++) {
+      int ci = base[j];
+      if (state[ci] >= 0) {
+        n_givens++;
+      }
+    }
+    n_unknowns = ns - n_givens;
+    if (n_unknowns < 2) {
+      return 1;
+    }
+  }
+  return 0;
+}
+/*}}}*/
 int inner_reduce(struct layout *lay, int *state, int options)/*{{{*/
 {
   int *copy, *answer;
@@ -39,6 +64,7 @@ int inner_reduce(struct layout *lay, int *state, int options)/*{{{*/
   int ok;
   int tally;
   int kept_givens = 0;
+  int is_trivial;
 
   inner_reduce_symmetrify_blanks(lay, state, options);
   if (!inner_reduce_check_solvable(lay, state, options)) {
@@ -49,80 +75,87 @@ int inner_reduce(struct layout *lay, int *state, int options)/*{{{*/
   answer = new_array(int, lay->nc);
   keep = new_array(int, lay->nc);
 
-  memset(keep, 0, lay->nc * sizeof(int));
-  tally = 0;
-  for (i=0; i<lay->nc; i++) {
-    if (state[i] >= 0) tally++;
-  }
-
-  /* Now remove givens one at a time until we find a minimum number that leaves
-   * a puzzle with a unique solution. */
-  memcpy(answer, state, lay->nc * sizeof(int));
-
   do {
-    int start_point;
-    int j;
-    start_point = lrand48() % lay->nc;
-    ok = -1;
+  
+    memset(keep, 0, lay->nc * sizeof(int));
+    tally = 0;
     for (i=0; i<lay->nc; i++) {
-      int ii;
-      int n_sol;
+      if (state[i] >= 0) tally++;
+    }
 
-      ii = (i + start_point) % lay->nc;
-      if (state[ii] < 0) continue;
-      if (keep[ii] == 1) continue;
+    /* Now remove givens one at a time until we find a minimum number that leaves
+     * a puzzle with a unique solution. */
+    memcpy(answer, state, lay->nc * sizeof(int));
 
-      memcpy(copy, state, lay->nc * sizeof(int));
+    do {
+      int start_point;
+      int j;
+      start_point = lrand48() % lay->nc;
+      ok = -1;
+      for (i=0; i<lay->nc; i++) {
+        int ii;
+        int n_sol;
 
-      /* Remove given from 'ii' and all its symmetry group. */
-      copy[ii] = -1;
-      for (j = SYM(ii); j != ii; j = SYM(j)) {
-        copy[j] = -1;
-      }
+        ii = (i + start_point) % lay->nc;
+        if (answer[ii] < 0) continue;
+        if (keep[ii] == 1) continue;
 
-      if (options & OPT_SPECULATE) {
-        n_sol = infer(lay, copy, NULL, 0, 0, OPT_SPECULATE);
-      } else {
-        n_sol = infer(lay, copy, NULL, 0, 0, (options & OPT_MAKE_EASIER) | OPT_STOP_ON_2);
-      }
-      tally--;
-      if (n_sol == 1) {
-        ok = ii;
-        break;
-      } else {
-        /* If it's no good removing this given now, it won't be any better to try
-         * removing it again later... */
-        if (options & OPT_VERBOSE) {
-          fprintf(stderr, "%4d :  (can't remove given from <%s>)\n", tally, lay->cells[ii].name);
-        }
-        keep[ii] = 1;
-        ++kept_givens;
+        memcpy(copy, answer, lay->nc * sizeof(int));
+
+        /* Remove given from 'ii' and all its symmetry group. */
+        copy[ii] = -1;
         for (j = SYM(ii); j != ii; j = SYM(j)) {
-          keep[j] = 1;
-          ++kept_givens;
+          copy[j] = -1;
+        }
+
+        if (options & OPT_SPECULATE) {
+          n_sol = infer(lay, copy, NULL, 0, 0, OPT_SPECULATE);
+        } else {
+          n_sol = infer(lay, copy, NULL, 0, 0, (options & OPT_MAKE_EASIER) | OPT_STOP_ON_2);
+        }
+        tally--;
+        if (n_sol == 1) {
+          ok = ii;
+          break;
+        } else {
+          /* If it's no good removing this given now, it won't be any better to try
+           * removing it again later... */
           if (options & OPT_VERBOSE) {
-            fprintf(stderr, "%4d :  (can't remove given from <%s> (sym))\n", tally, lay->cells[j].name);
+            fprintf(stderr, "%4d :  (can't remove given from <%s>)\n", tally, lay->cells[ii].name);
+          }
+          keep[ii] = 1;
+          ++kept_givens;
+          for (j = SYM(ii); j != ii; j = SYM(j)) {
+            keep[j] = 1;
+            ++kept_givens;
+            if (options & OPT_VERBOSE) {
+              fprintf(stderr, "%4d :  (can't remove given from <%s> (sym))\n", tally, lay->cells[j].name);
+            }
+            tally--;
+          }
+        }
+      }
+
+      if (ok >= 0) {
+        answer[ok] = -1;
+        if (options & OPT_VERBOSE) {
+          fprintf(stderr, "%4d : Removing given from <%s>\n", tally, lay->cells[ok].name);
+        }
+
+        for (j=SYM(ok); j != ok; j = SYM(j)) {
+          answer[j] = -1;
+          if (options & OPT_VERBOSE) {
+            fprintf(stderr, "%4d : Removing given from <%s> (sym)\n", tally, lay->cells[j].name);
           }
           tally--;
         }
       }
-    }
+    } while (ok >= 0);
 
-    if (ok >= 0) {
-      state[ok] = -1;
-      if (options & OPT_VERBOSE) {
-        fprintf(stderr, "%4d : Removing given from <%s>\n", tally, lay->cells[ok].name);
-      }
+    is_trivial = trivial_p(lay, answer);
+  } while (is_trivial && !(options & OPT_ALLOW_TRIVIAL));
 
-      for (j=SYM(ok); j != ok; j = SYM(j)) {
-        state[j] = -1;
-        if (options & OPT_VERBOSE) {
-          fprintf(stderr, "%4d : Removing given from <%s> (sym)\n", tally, lay->cells[j].name);
-        }
-        tally--;
-      }
-    }
-  } while (ok >= 0);
+  memcpy(state, answer, lay->nc * sizeof(int));
 
   free(copy);
   free(answer);

@@ -85,12 +85,14 @@ struct super_layout {
 #define OPT_SYM_90 (1<<5)
 #define OPT_SYM_HORIZ (1<<6)
 #define OPT_SYM_VERT (1<<7)
+#define OPT_HINT (1<<8)
+#define OPT_ALLOW_TRIVIAL (1<<9)
 
-#define OPT_NO_LINES   (1<<10)
-#define OPT_NO_SUBSETS (1<<11)
-#define OPT_NO_ONLYOPT (1<<12)
-#define OPT_NO_NEAR    (1<<13)
-#define OPT_NO_REMOTE  (1<<14)
+#define OPT_NO_LINES   (1<<16)
+#define OPT_NO_SUBSETS (1<<17)
+#define OPT_NO_ONLYOPT (1<<18)
+#define OPT_NO_NEAR    (1<<19)
+#define OPT_NO_REMOTE  (1<<20)
 
 #define OPT_MAKE_EASIER (OPT_NO_LINES | OPT_NO_SUBSETS | OPT_NO_ONLYOPT | OPT_NO_NEAR | OPT_NO_REMOTE)
 
