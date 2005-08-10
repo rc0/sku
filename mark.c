@@ -75,9 +75,8 @@ void mark_cells(int grey_cells, int options)/*{{{*/
   int *state;
   int *copy;
   struct intpair *shade = NULL;
-  int *flags;
   int *order;
-  int i, j, k, n;
+  int i, j;
   struct layout *lay;
 
   read_grid(&lay, &state, options);
@@ -101,39 +100,33 @@ void mark_cells(int grey_cells, int options)/*{{{*/
     }
     qsort(shade, lay->nc, sizeof(struct intpair), compare_intpair);
 
-    for (i=0; i<lay->nc; i++) {
-      int ix, ord;
-      ix = shade[i].a;
-      ord = shade[i].b;
-      if (lay->cells[ix].is_terminal) {
-        fprintf(stderr, "%4d : <%s>\n", ord, lay->cells[ix].name);
+    if (options & OPT_VERBOSE) {
+      int pos = 1;
+      fprintf(stderr, "Cells which provide no clues to solving others:\n");
+      fprintf(stderr, "    N :  Ord :  Cell\n");
+      for (i=0; i<lay->nc; i++) {
+        int ix, ord;
+        ix = shade[i].a;
+        ord = shade[i].b;
+        if (lay->cells[ix].is_terminal) {
+          fprintf(stderr, "  %3d : %4d : <%s>\n", pos++, ord, lay->cells[ix].name);
+        }
       }
     }
-    exit(0);
     
-    flags = new_array(int, lay->nc);
-    memset(flags, 0, lay->nc * sizeof(int));
     for (i=0, j=0; i<grey_cells; i++) {
       int ic;
       do {
         ic = shade[j++].a;
-      } while (flags[ic]);
-      state[ic] = -2;
-      for (k=0; k<NDIM; k++) {
-        int gx = lay->cells[ic].group[k];
-        if (gx >= 0) {
-          for (n=0; n<lay->ns; n++) {
-            int oic = lay->groups[gx*lay->ns + n];
-            flags[oic] = 1;
-          }
-        } else {
-          break;
-        }
+      } while ((j < lay->nc) && (!lay->cells[ic].is_terminal));
+      if (j >= lay->nc) {
+        fprintf(stderr, "Didn't have enough terminal cells to allocate %d greys\n", grey_cells);
+        break;
       }
+      state[ic] = -2;
     }
     free(order);
     free(copy);
-    free(flags);
   }
 
   display(stdout, lay, state);
