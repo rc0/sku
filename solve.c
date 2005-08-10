@@ -5,6 +5,7 @@ void solve(int options)/*{{{*/
   int *state;
   int n_solutions;
   struct layout *lay;
+  int i;
 
   read_grid(&lay, &state, options);
   n_solutions = infer(lay, state, NULL, 0, 0, options);

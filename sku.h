@@ -14,6 +14,7 @@ struct cell {
   char *name;           /* cell name for verbose + debug output. */
   int index;            /* self-index (to track reordering during geographical sort.) */
   int is_overlap;
+  int is_terminal;      /* Hack, need to do this properly. */
   short prow, pcol;     /* coordinates for printing to text output */
   short rrow, rcol;     /* raw coordinates for printing to formatted output (SVG etc) */
   short isym;           /* index of next cell in same symmetry group (circular ring) */

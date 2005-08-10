@@ -108,15 +108,17 @@ allocate(struct layout *lay,
   int j, k;
   int NS;
   short *base;
+  int other_poss;
+
+  mask = 1<<val;
+  NS = lay->ns;
 
   state[ic] = val;
+  other_poss = poss[ic] & ~mask;
   poss[ic] = 0;
   if (order) {
     order[ic] = (*solvepos)++;
   }
-
-  mask = 1<<val;
-  NS = lay->ns;
 
   for (k=0; k<NDIM; k++) {
     int gg = lay->cells[ic].group[k];
@@ -133,6 +135,16 @@ allocate(struct layout *lay,
         if (poss[jc] & mask) {
           poss[jc] &= ~mask;
           requeue_groups(lay, scan_q, jc);
+          if (lay->cells[ic].is_terminal) {
+            lay->cells[ic].is_terminal = 0;
+          }
+        }
+        if (poss[jc] & other_poss) {
+          /* The discovery of state[ic] has contributed to eventually solving [jc],
+           * so [ic] is now non-terminal. */
+          if (lay->cells[ic].is_terminal) {
+            lay->cells[ic].is_terminal = 0;
+          }
         }
       }
     } else {
@@ -242,6 +254,7 @@ try_subsets(int gi,
     int mask = (1 << sym);
     if (todo[gi] & mask) {
       int j;
+      int found_something = 0;
       memset(flags, 0, NC);
       memset(counts, 0, NG*sizeof(int));
       n_poss_cells = 0;
@@ -276,8 +289,20 @@ try_subsets(int gi,
                 }
                 poss[ic] &= ~mask;
                 requeue_groups(lay, scan_q, ic);
+                found_something = 1;
                 did_anything = 1;
               }
+            }
+          }
+        }
+      }
+      if (0 && found_something) {
+        /* Mark the cells that caused the derivation as non-terminal */
+        for (j=0; j<NC; j++) {
+          if (flags[j]) {
+            if (lay->cells[j].is_terminal) {
+              lay->cells[j].is_terminal = 0;
+              fprintf(stderr, "Clearing terminal status of <%s>\n", lay->cells[j].name);
             }
           }
         }
