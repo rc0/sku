@@ -17,7 +17,7 @@ const static char symbols_25[25] = {/*{{{*/
   'V', 'W', 'X', 'Y', 'Z'
 };
 /*}}}*/
-void layout_MxN(int M, int N, struct layout *lay, int options) /*{{{*/
+void layout_MxN(int M, int N, int x_layout, struct layout *lay, int options) /*{{{*/
 {
   /* This function is REQUIRED to return the cells in raster scan order.
    * Obviously this is necessary for the grid reader, but it's also
@@ -35,7 +35,9 @@ void layout_MxN(int M, int N, struct layout *lay, int options) /*{{{*/
   char buffer[32];
 
   lay->ns = NS = MN;
-  lay->ng = NG = 3*MN;
+  NG = 3*MN;
+  if (x_layout) NG += 2;
+  lay->ng = NG;
   lay->nc = NC = MN*MN;
   lay->prows = MN + (N-1);
   lay->pcols = MN + (M-1);
@@ -65,7 +67,7 @@ void layout_MxN(int M, int N, struct layout *lay, int options) /*{{{*/
           lay->cells[ic].group[0] = row;
           lay->cells[ic].group[1] = MN + col;
           lay->cells[ic].group[2] = 2*MN + block;
-          for (k=3; k<6; k++) {
+          for (k=3; k<NDIM; k++) {
             lay->cells[ic].group[k] = -1;
           }
           /* Put spacers every N rows/cols in the printout. */
@@ -81,7 +83,7 @@ void layout_MxN(int M, int N, struct layout *lay, int options) /*{{{*/
       }
     }
   }
-  lay->group_names = new_array(char *, 3*MN);
+  lay->group_names = new_array(char *, NG);
   for (i=0; i<MN; i++) {
     char buffer[32];
     sprintf(buffer, "row-%c", 'A' + i);
@@ -93,6 +95,30 @@ void layout_MxN(int M, int N, struct layout *lay, int options) /*{{{*/
     sprintf(buffer, "blk-%c%d", 'A' + M*(i/M), 1 + N*(i%M));
     lay->group_names[i+2*MN] = strdup(buffer);
     lay->is_block[i+2*MN] = 1;
+  }
+
+  if (x_layout) {
+    short *base0, *base1;
+    int ci0, ci1;
+    lay->group_names[NG-2] = strdup("diag-\\");
+    lay->group_names[NG-1] = strdup("diag-/");
+    base0 = lay->groups + NS*(NG-2);
+    base1 = lay->groups + NS*(NG-1);
+    ci0 = 0;
+    ci1 = NS - 1;
+    for (i=0; i<NS; i++) {
+      lay->cells[ci0].group[3] = NG - 2;
+      if (ci0 == ci1) {
+        /* Central square if MN is odd */
+        lay->cells[ci1].group[4] = NG - 1;
+      } else {
+        lay->cells[ci1].group[3] = NG - 1;
+      }
+      base0[i] = ci0;
+      base1[i] = ci1;
+      ci0 += (NS + 1);
+      ci1 += (NS - 1);
+    }
   }
 
   lay->n_thinlines = (MN - M) + (MN - N);

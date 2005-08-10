@@ -22,6 +22,7 @@ static void usage(void)
       "With no option, solve a puzzle\n"
       "  -f                 : if puzzle has >1 solution, only find the first\n"
       "  -s                 : use speculation if logic fails to complete the grid\n"
+      "  -A                 : show all solutions if using speculation and the puzzle is ambiguous\n"
       "\n"
       "-b<layout>           : create a blank grid with named <layout>\n"
       "\n"
@@ -114,6 +115,8 @@ int main (int argc, char **argv)/*{{{*/
       exit(0);
     } else if (!strcmp(*argv, "-a")) {
       operation = OP_ANY;
+    } else if (!strcmp(*argv, "-A")) {
+      options |= OPT_SHOW_ALL;
     } else if (!strncmp(*argv, "-b", 2)) {
       operation = OP_BLANK;
       layout_name = *argv + 2;

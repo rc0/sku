@@ -141,7 +141,7 @@ static void fixup_lines(int n, struct dline *d, int xoff, int yoff)/*{{{*/
   }
 }
 /*}}}*/
-void layout_MxN_superlay(int M, int N, const struct super_layout *superlay, struct layout *lay, int options)/*{{{*/
+void layout_MxN_superlay(int M, int N, int x_layout, const struct super_layout *superlay, struct layout *lay, int options)/*{{{*/
 {
   struct layout *tlay;
   int nsg;
@@ -155,7 +155,7 @@ void layout_MxN_superlay(int M, int N, const struct super_layout *superlay, stru
   nsg = superlay->n_subgrids;
   tlay = new_array(struct layout, nsg);
   for (i=0; i<nsg; i++) {
-    layout_MxN(M, N, tlay + i, options);
+    layout_MxN(M, N, x_layout, tlay + i, options);
   }
 
   /* Relabel and reindex the tables. */
@@ -270,23 +270,30 @@ void layout_MxN_superlay(int M, int N, const struct super_layout *superlay, stru
       for (n=0; n<N; n++) {
         int ic0, ic1;
         int q;
+        int ofs;
         struct cell *c0, *c1;
         ic0 = off0 + m*MN + n;
         ic1 = off1 + m*MN + n;
         c0 = lay->cells + ic0;
         c1 = lay->cells + ic1;
-        /* Copy 2ary cell's groups into 1ary cell's table. */
-        for (q=0; q<3; q++) {
-          c0->group[3+q] = c1->group[q];
+        /* Copy 2ary cell's groups into 1ary cell's table.  First, find the end
+         * of the existing group list on the 1ary cell. */
+        for (ofs=0; ofs<NDIM; ofs++) {
+          if (c0->group[ofs] < 0) break;
+        }
+        for (q=0; q<NDIM; q++) {
+          if (c1->group[q] < 0) break;
+          c0->group[ofs+q] = c1->group[q];
         }
         /* Merge cell names */
         sprintf(buffer, "%s/%s", c0->name, c1->name);
         c0->name = strdup(buffer);
         c0->is_overlap = 1;
         /* For each group c1 is in, change the index to point to c0 */
-        for (q=0; q<3; q++) {
+        for (q=0; q<NDIM; q++) {
           int r;
           int grp = c1->group[q];
+          if (grp < 0) break;
           for (r=0; r<tns; r++) {
             if (lay->groups[tns*grp + r] == ic1) {
               lay->groups[tns*grp + r] = ic0;

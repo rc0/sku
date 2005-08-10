@@ -6,8 +6,9 @@
 #include <string.h>
 #include <unistd.h>
 
-/* To cope with interlocked puzzles where some cells may be in 6 logical groups. */
-#define NDIM 6
+/* To cope with interlocked puzzles where some cells may be in 8 logical groups
+ * (namely, the ones in the overlapping blocks if diagonals mode is on.) */
+#define NDIM 8
 
 struct cell {
   char *name;           /* cell name for verbose + debug output. */
@@ -87,6 +88,7 @@ struct super_layout {
 #define OPT_SYM_VERT (1<<7)
 #define OPT_HINT (1<<8)
 #define OPT_ALLOW_TRIVIAL (1<<9)
+#define OPT_SHOW_ALL (1<<10)
 
 #define OPT_NO_LINES   (1<<16)
 #define OPT_NO_SUBSETS (1<<17)
@@ -112,10 +114,11 @@ extern void superlayout_5(struct super_layout *superlay);
 extern void superlayout_8(struct super_layout *superlay);
 extern void superlayout_9(struct super_layout *superlay);
 extern void superlayout_11(struct super_layout *superlay);
-extern void layout_MxN_superlay(int M, int N, const struct super_layout *superlay, struct layout *lay, int options);
+extern void layout_MxN_superlay(int M, int N, int x_layout,
+    const struct super_layout *superlay, struct layout *lay, int options);
 
 /* In layout_mxn.c */
-extern void layout_MxN(int M, int N, struct layout *lay, int options);
+extern void layout_MxN(int M, int N, int x_layout, struct layout *lay, int options);
 
 /* In genlayout.c */
 extern void find_symmetries(struct layout *lay, int options);
