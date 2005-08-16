@@ -1,0 +1,133 @@
+.\" Created by Richard Curnow
+.TH sku 6 "12 Aug 2005" "sku"
+
+.SH NAME
+sku \- tool for solving and setting Sudoku puzzles
+
+.SH SYNOPSIS
+.B sku
+[-h] [options]
+
+.SH DESCRIPTION
+sku is a tool which can set and solve Sudoku puzzles.  The standard form of
+Sudoku puzzle is a 9x9 square grid, where the cells are also grouped into 9
+smaller squares of size 3x3.  Some of the cells initially contain numbers in
+the range 1-9.  In solving the puzzle, each row, each column and each of the
+3x3 sub-squares must contain each of the numbers 1 through 9 exactly once.
+
+In a well-designed puzzle, the initially filled-in squares (or "givens") will
+have been chosen so that there is precisly one solution.  In really
+well-designed puzzles, it will be possible to reach the solution by logic
+alone, without having to "guess + backgrack" at any stage.  (There is some
+dispute over what "logic alone" means, but the typical definition is that at
+any stage it is possible to either determine the value of a cell, or remove
+possible options from cell(s).)
+
+Many variations on the Sudoku theme exist:
+
+.IP *
+Grids of sizes other than 9x9.  A common design is 6x6, containing 6 internal
+rectangles of size 3x2.
+
+.IP *
+Grids where the 2 main diagonals are also groups in which the symbols must
+occur precisely once.  Puzzles with this constraint will contain fewer initial
+givens, and hence be harder.
+
+.IP *
+Puzzles with multiple square grids that are interlinked.  A common form is the
+"5-gattai" puzzle, where 5 9x9 grids are layed out in an X shape, with the
+corner 3x3 block overlapping between the corner grids and the central one.
+
+.P
+sku can perform the following operations:
+
+.IP *
+Solve a puzzle.  If the puzzle has multiple solutions, it can either report how
+many there are, or display all the solutions.
+.IP *
+Give a hint for a partially solved puzzle (i.e. report the next cell that can
+be completed.)
+.IP *
+Take a puzzle with at least one solution and display any one of them.
+.IP *
+Take a solution and reduce it to a puzzle.  (In fact, it can take any grid that
+has a unique solution, and remove any redundant givens from it.)  Various
+options exist to generate easy or hard puzzles, and to preserve symmetric
+arrangements of givens.
+.IP *
+Take a puzzle and grade how difficult it appears to be
+.IP *
+Format a puzzle into an SVG file, which can be loaded into another program for
+final formatting and printing.  Additionally, it is possible to mark a number
+of the hardest-to-solve cells in the puzzle in grey.  (This is frequently seen
+in newspaper prize puzzles, to minimise the amount of data that readers need to
+send in to prove they have solved the puzzle (or at least, nearly all of it).)
+
+.SH SOLVING A PUZZLE
+.P
+The first step in solving a puzzle is to create a blank grid (see next section)
+and insert the known cells into it with a text editor.
+
+
+.SH CREATING A BLANK GRID
+.P
+Creating a blank grid uses the
+.B -b
+option.  This can be suffixed with an optional string indicating the layout
+of the grid to generate.  If no layout string is provided, the default is to
+produce the standard 9x9 grid.  For example
+.P
+.B "sku -b4"
+produces a 16x16 grid with 4x4 internal sub-squares, requiring the hex symbols
+0 through F to be used
+.P
+.B "sku -b5"
+produces a 25x25 grid with 5x5 internal sub-squares, requiring the upper case
+letters A through Y to be used.
+.P
+.B "sku -b23"
+produces a 6x6 grid with internal rectangles having 2 rows and 3 columns.  The
+symbols 1 through 6 are to be used.
+
+.P
+For up to 9 symbols, the numbers from 1 to N are used.
+.P
+For more than 9 but less than 17 symbols the hex symbols 0 through (N-1) are used.
+.P
+For more than 16 but less than 26 symbols, letters from A through to Y are used.
+.P
+sku will refuse to handle more than 25 symbols.  (Such puzzles are probably so
+difficult as to be of little interest anyway.)
+
+.P
+To generate a puzzle with the main diagonals providing extra groups, prefix 'x'
+onto the layout code.  For example,
+.B "sku -bx23"
+will generate a 6x6 grid with diagonal groups.
+
+.P
+To generate a puzzle with interlinked grids, the string
+.B /N
+is suffixed to the layout code, where N is one of:
+.P
+.B 5
+\- the standard 5-gattai arrangement (rows of 2-1-2 from top to bottom)
+.br
+.B 8
+\- rows of 3-2-3 from top to bottom
+.br
+.B 9
+\- rows of 1-2-3-2-1 from top to bottom (i.e. the grids like in a 3x3 square turned through 45 degrees)
+.br
+.B 11
+\- rows of 4-3-4 from top to bottom
+
+.P
+So, for example,
+.B "sku -b3/5"
+generates the standard 5-gattai layout.
+
+
+
+
