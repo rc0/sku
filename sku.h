@@ -90,6 +90,7 @@ struct super_layout {
 #define OPT_HINT (1<<8)
 #define OPT_ALLOW_TRIVIAL (1<<9)
 #define OPT_SHOW_ALL (1<<10)
+#define OPT_ONLYOPT_FIRST (1<<11)
 
 #define OPT_NO_LINES   (1<<16)
 #define OPT_NO_SUBSETS (1<<17)

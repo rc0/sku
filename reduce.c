@@ -243,6 +243,7 @@ void reduce(int iters_for_min, int options, int req_n)/*{{{*/
         memcpy(result, copy, lay->nc * sizeof(int));
       }
     }
+    free(copy);
     display(stdout, lay, result);
   }
 
