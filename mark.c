@@ -87,9 +87,7 @@ void mark_cells(int grey_cells, int options)/*{{{*/
     memcpy(copy, state, lay->nc * sizeof(int));
     memset(order, 0, lay->nc * sizeof(int));
     
-    for (i=0; i<lay->nc; i++) {
-      lay->cells[i].is_terminal = 1;
-    }
+    setup_terminals(lay);
     infer(lay, copy, order, 0, 0, OPT_SPECULATE);
     weed_terminals(lay, order);
 
@@ -120,18 +118,20 @@ void mark_cells(int grey_cells, int options)/*{{{*/
         ic = shade[j++].a;
       } while ((j < lay->nc) && (!lay->cells[ic].is_terminal));
       if (j >= lay->nc) {
-        fprintf(stderr, "Didn't have enough terminal cells to allocate %d greys\n", grey_cells);
+        fprintf(stderr, "Didn't have enough terminal cells to allocate %d greys (allocated %d)\n", grey_cells, i);
         break;
       }
       state[ic] = -2;
     }
     free(order);
     free(copy);
+    free(shade);
   }
 
   display(stdout, lay, state);
 
   free(state);
+  free_layout(lay);
 }
 /*}}}*/
 

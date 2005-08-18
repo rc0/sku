@@ -161,3 +161,36 @@ void layout_MxN(int M, int N, int x_layout, struct layout *lay, int options) /*{
   find_symmetries(lay, options);
 }
 /*}}}*/
+
+void free_layout_lite(struct layout *lay)/*{{{*/
+{
+  free(lay->thinlines);
+  free(lay->mediumlines);
+  free(lay->thicklines);
+  free(lay->groups);
+  free(lay->group_names);
+  free(lay->cells);
+  if (lay->name) free(lay->name);
+  free(lay->is_block);
+}
+/*}}}*/
+void free_layout(struct layout *lay)/*{{{*/
+{
+  int i;
+  free(lay->thinlines);
+  free(lay->mediumlines);
+  free(lay->thicklines);
+  free(lay->groups);
+  for (i=0; i<lay->ng; i++) {
+    free(lay->group_names[i]);
+  }
+  free(lay->group_names);
+  for (i=0; i<lay->nc; i++) {
+    free(lay->cells[i].name);
+  }
+  free(lay->cells);
+  free(lay->name);
+  free(lay->is_block);
+  free(lay);
+}
+/*}}}*/

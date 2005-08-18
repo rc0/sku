@@ -205,6 +205,11 @@ try_group_allocate(int gi,
         allocate(lay, state, poss, todo, scan_q, order, solvepos, xic, sym);
         found_any = 1;
         if (options & OPT_HINT) {
+          rm_queue(scan_q);
+          free(state);
+          free(todo);
+          free(poss);
+          free_layout(lay);
           exit(0);
         }
       }
@@ -576,6 +581,11 @@ do_uniques(struct layout *lay,
         --*n_todo;
         allocate(lay, state, poss, todo, scan_q, order, solvepos, ic, sym);
         if (options & OPT_HINT) {
+          rm_queue(scan_q);
+          free(state);
+          free(todo);
+          free(poss);
+          free_layout(lay);
           exit(0);
         }
       }

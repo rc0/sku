@@ -21,6 +21,7 @@ static int inner_reduce_check_solvable(struct layout *lay, int *state, int optio
   int n_solutions, result;
   copy = new_array(int, lay->nc);
   memcpy(copy, state, lay->nc * sizeof(int));
+  setup_terminals(lay);
   n_solutions = infer(lay, copy, NULL, 0, 0, OPT_STOP_ON_2 | (options & OPT_SPECULATE));
   if (n_solutions == 1) {
     result = 1;
@@ -109,8 +110,10 @@ int inner_reduce(struct layout *lay, int *state, int options)/*{{{*/
         }
 
         if (options & OPT_SPECULATE) {
+          setup_terminals(lay);
           n_sol = infer(lay, copy, NULL, 0, 0, OPT_SPECULATE);
         } else {
+          setup_terminals(lay);
           n_sol = infer(lay, copy, NULL, 0, 0, (options & OPT_MAKE_EASIER) | OPT_STOP_ON_2);
         }
         tally--;
@@ -243,6 +246,9 @@ void reduce(int iters_for_min, int options, int req_n)/*{{{*/
     display(stdout, lay, result);
   }
 
+  free(result);
+  free(state);
+  free_layout(lay);
   return;
 }
 /*}}}*/

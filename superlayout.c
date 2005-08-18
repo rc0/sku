@@ -141,6 +141,16 @@ static void fixup_lines(int n, struct dline *d, int xoff, int yoff)/*{{{*/
   }
 }
 /*}}}*/
+void free_superlayout(struct super_layout *superlay)/*{{{*/
+{
+  int i;
+  for (i=0; i<superlay->n_subgrids; i++) {
+    free(superlay->subgrids[i].name);
+  }
+  free(superlay->subgrids);
+  free(superlay->links);
+}
+/*}}}*/
 void layout_MxN_superlay(int M, int N, int x_layout, const struct super_layout *superlay, struct layout *lay, int options)/*{{{*/
 {
   struct layout *tlay;
@@ -156,6 +166,7 @@ void layout_MxN_superlay(int M, int N, int x_layout, const struct super_layout *
   tlay = new_array(struct layout, nsg);
   for (i=0; i<nsg; i++) {
     layout_MxN(M, N, x_layout, tlay + i, options);
+    tlay[i].name = NULL;
   }
 
   /* Relabel and reindex the tables. */
@@ -169,6 +180,7 @@ void layout_MxN_superlay(int M, int N, int x_layout, const struct super_layout *
       struct cell *c = ll->cells + j;
       c->index = j + cell_base;
       sprintf(buffer, "%s:%s", sg->name, c->name);
+      free(c->name);
       c->name = strdup(buffer);
       c->prow += (N-1)*(M+1) * sg->yoff;
       c->pcol += (M-1)*(N+1) * sg->xoff;
@@ -188,6 +200,7 @@ void layout_MxN_superlay(int M, int N, int x_layout, const struct super_layout *
         ll->groups[j*ll->ns + k] += cell_base;
       }
       sprintf(buffer, "%s:%s", sg->name, ll->group_names[j]);
+      free(ll->group_names[j]);
       ll->group_names[j] = strdup(buffer);
     }
     fixup_lines(ll->n_thinlines, ll->thinlines, N*(M-1)*sg->xoff, M*(N-1)*sg->yoff);
@@ -287,6 +300,7 @@ void layout_MxN_superlay(int M, int N, int x_layout, const struct super_layout *
         }
         /* Merge cell names */
         sprintf(buffer, "%s/%s", c0->name, c1->name);
+        free(c0->name);
         c0->name = strdup(buffer);
         c0->is_overlap = 1;
         /* For each group c1 is in, change the index to point to c0 */
@@ -306,6 +320,7 @@ void layout_MxN_superlay(int M, int N, int x_layout, const struct super_layout *
       }
     }
   }
+
 
   /* Sort the remaining cells into geographical order. */
   qsort(lay->cells, tnc*nsg, sizeof(struct cell), superlayout_cell_compare);
@@ -348,6 +363,13 @@ void layout_MxN_superlay(int M, int N, int x_layout, const struct super_layout *
 
   find_symmetries(lay, options);
 
+  /* Purge buried cells */
+  for (i=lay->nc; i < nsg*tlay->nc; i++) {
+    free(lay->cells[i].name);
+  }
+  for (i=0; i<nsg; i++) {
+    free_layout_lite(tlay + i);
+  }
+  free(tlay);
 }
 /*}}}*/
-

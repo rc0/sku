@@ -9,5 +9,6 @@ void blank(struct layout *lay)/*{{{*/
     state[i] = -1;
   }
   display(stdout, lay, state);
+  free(state);
 }
 /*}}}*/

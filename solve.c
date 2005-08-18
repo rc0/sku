@@ -5,9 +5,9 @@ void solve(int options)/*{{{*/
   int *state;
   int n_solutions;
   struct layout *lay;
-  int i;
 
   read_grid(&lay, &state, options);
+  setup_terminals(lay);
   n_solutions = infer(lay, state, NULL, 0, 0, options);
 
   if (n_solutions == 0) {
@@ -26,7 +26,8 @@ void solve(int options)/*{{{*/
     }
   }
 
-
+  free(state);
+  free_layout(lay);
   return;
 }
 /*}}}*/
@@ -37,6 +38,7 @@ void solve_any(int options)/*{{{*/
   struct layout *lay;
 
   read_grid(&lay, &state, options);
+  setup_terminals(lay);
   n_solutions = infer(lay, state, NULL, 0, 0, OPT_SPECULATE | OPT_FIRST_ONLY | options);
 
   if (n_solutions == 0) {
@@ -46,6 +48,8 @@ void solve_any(int options)/*{{{*/
 
   display(stdout, lay, state);
 
+  free(state);
+  free_layout(lay);
   return;
 }
 /*}}}*/

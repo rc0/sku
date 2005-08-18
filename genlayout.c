@@ -211,6 +211,7 @@ struct layout *genlayout(const char *name, int options)/*{{{*/
     debug_layout(result);
     exit(0);
 #endif
+    free_superlayout(&superlay);
   } else {
     parse_mn(name1, strlen(name1), &M, &N);
     layout_MxN(M, N, x_layout, result, options);

@@ -83,5 +83,8 @@ void format_output(int options)/*{{{*/
 
   printf("</g>\n");
   printf("</svg>\n");
+
+  free(state);
+  free_layout(lay);
 }
 /*}}}*/

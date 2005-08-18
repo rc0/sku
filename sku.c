@@ -163,7 +163,7 @@ int main (int argc, char **argv)/*{{{*/
       operation = OP_REDUCE;
     } else if (!strncmp(*argv, "-R", 2)) {
       if ((*argv)[2] == 0) {
-        options |= OPT_MAKE_EASIER;
+        reduce_req_n = OPT_MAKE_EASIER;
       } else {
         const char *p = 2 + *argv;
         while (*p) {
@@ -227,6 +227,7 @@ int main (int argc, char **argv)/*{{{*/
         struct layout *lay;
         lay = genlayout(*layout_name ? layout_name : "3", options);
         blank(lay);
+        free_layout(lay);
         break;
       }
     case OP_GRADE:

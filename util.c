@@ -53,3 +53,11 @@ void show_symbols_in_set(int ns, const char *symbols, int bitmap)/*{{{*/
   }
 }
 /*}}}*/
+void setup_terminals(struct layout *lay)/*{{{*/
+{
+  int i;
+  for (i=0; i<lay->nc; i++) {
+    lay->cells[i].is_terminal = 1;
+  }
+}
+/*}}}*/

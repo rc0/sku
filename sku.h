@@ -106,6 +106,7 @@ extern int count_bits(unsigned int a);
 extern int decode(unsigned int a);
 extern char *tobin(int n, int x);
 extern void show_symbols_in_set(int ns, const char *symbols, int bitmap);
+extern void setup_terminals(struct layout *lay);
 
 /* In infer.c */
 int infer(struct layout *lay, int *state, int *order, int iter, int solvepos, int options);
@@ -117,9 +118,12 @@ extern void superlayout_9(struct super_layout *superlay);
 extern void superlayout_11(struct super_layout *superlay);
 extern void layout_MxN_superlay(int M, int N, int x_layout,
     const struct super_layout *superlay, struct layout *lay, int options);
+extern void free_superlayout(struct super_layout *superlay);
 
 /* In layout_mxn.c */
 extern void layout_MxN(int M, int N, int x_layout, struct layout *lay, int options);
+extern void free_layout(struct layout *lay);
+extern void free_layout_lite(struct layout *lay);
 
 /* In genlayout.c */
 extern void find_symmetries(struct layout *lay, int options);
