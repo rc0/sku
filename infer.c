@@ -90,12 +90,7 @@ struct ws {/*{{{*/
   int *state;
 
   /* Queues for what to scan next. */
-  struct queue *block_q;
-  struct queue *line_q;
-  struct queue *onlyopt_q;
-  struct queue *subset_q;
-  struct queue *remote_q;
-  struct queue *near_q;
+  struct queue *scan_q;
 };
 /*}}}*/
 static struct ws *make_ws(int nc, int ng, int ns)/*{{{*/
@@ -116,12 +111,7 @@ static struct ws *make_ws(int nc, int ng, int ns)/*{{{*/
   for (i=0; i<ng; i++) ws->todo[i] = fill;
   for (i=0; i<nc; i++) ws->poss[i] = fill;
 
-  ws->block_q = mk_queue(ng);
-  ws->line_q = mk_queue(ng);
-  ws->onlyopt_q = mk_queue(nc);
-  ws->subset_q = mk_queue(ng);
-  ws->remote_q = mk_queue(ng);
-  ws->near_q = mk_queue(ng);
+  ws->scan_q = mk_queue(ng);
   
   return ws;
 }
@@ -152,12 +142,7 @@ static struct ws *clone_ws(const struct ws *src)/*{{{*/
   ws->state = NULL;
 
   /* When we need to clone, we know the queues must be empty! */
-  ws->block_q = mk_queue(src->ng);
-  ws->line_q = mk_queue(src->ng);
-  ws->onlyopt_q = mk_queue(src->nc);
-  ws->subset_q = mk_queue(src->ng);
-  ws->remote_q = mk_queue(src->ng);
-  ws->near_q = mk_queue(src->ng);
+  ws->scan_q = mk_queue(src->ng);
   return ws;
 }
 /*}}}*/
@@ -165,12 +150,7 @@ static void free_ws(struct ws *ws)/*{{{*/
 {
   free(ws->poss);
   free(ws->todo);
-  rm_queue(ws->block_q);
-  rm_queue(ws->line_q);
-  rm_queue(ws->onlyopt_q);
-  rm_queue(ws->subset_q);
-  rm_queue(ws->remote_q);
-  rm_queue(ws->near_q);
+  rm_queue(ws->scan_q);
   free(ws);
 }
 /*}}}*/
@@ -181,22 +161,9 @@ static int inner_infer(struct layout *lay, struct ws *ws);
 
 /* ============================================================================ */
 
-/*{{{ requeue_group() */
+/*{{{ requeue_groups() */
 static void
-requeue_group(int gi, struct layout *lay, struct ws *ws)
-{
-  int ib = lay->is_block[gi];
-  int options = ws->options;
-  if (ib) enqueue(ws->block_q, gi);
-  if (!(options & OPT_NO_LINES) && !ib) enqueue(ws->line_q, gi);
-  if (!(options & OPT_NO_SUBSETS)) enqueue(ws->subset_q, gi);
-  if (!(options & OPT_NO_NEAR)) enqueue(ws->near_q, gi);
-  if (!(options & OPT_NO_REMOTE)) enqueue(ws->remote_q, gi);
-}
-/*}}}*/
-/*{{{ requeue_cell_groups() */
-static void
-requeue_cell_groups(struct layout *lay,
+requeue_groups(struct layout *lay,
                struct ws *ws,
                int ic)
 {
@@ -204,7 +171,7 @@ requeue_cell_groups(struct layout *lay,
   struct cell *cell = lay->cells + ic;
   for (i=0; i<NDIM; i++) {
     int gi = cell->group[i];
-    if (gi >= 0) requeue_group(gi, lay, ws);
+    if (gi >= 0) enqueue(ws->scan_q, gi);
     else break;
   }
 }
@@ -234,17 +201,14 @@ allocate(struct layout *lay, struct ws *ws, int is_init, int ic, int val)
     int gg = lay->cells[ic].group[k];
     if (gg >= 0) {
       ws->todo[gg] &= ~mask;
-      requeue_group(gg, lay, ws);
+      enqueue(ws->scan_q, gg);
       base = lay->groups + gg*NS;
       for (j=0; j<NS; j++) {
         int jc;
         jc = base[j];
         if (ws->poss[jc] & mask) {
           ws->poss[jc] &= ~mask;
-          if (!(ws->options & OPT_NO_ONLYOPT)) {
-            enqueue(ws->onlyopt_q, jc);
-          }
-          requeue_cell_groups(lay, ws, jc);
+          requeue_groups(lay, ws, jc);
           if (lay->cells[ic].is_terminal) {
             lay->cells[ic].is_terminal = 0;
           }
@@ -384,7 +348,7 @@ try_subsets(int gi,
                       lay->group_names[j], lay->group_names[gi]);
                 }
                 ws->poss[ic] &= ~mask;
-                requeue_cell_groups(lay, ws, ic);
+                requeue_groups(lay, ws, ic);
                 found_something = 1;
                 did_anything = 1;
               }
@@ -473,10 +437,10 @@ try_near_stragglers(int gi,
               show_symbols_in_set(NS, lay->symbols, ws->poss[ci] & ~intersect[sym]);
               fprintf(stderr, "> from <%s>, must be one of <", lay->cells[ci].name);
               show_symbols_in_set(NS, lay->symbols, intersect[sym]);
-              fprintf(stderr, "> (in <%s>)\n", lay->group_names[gi]);
+              fprintf(stderr, ">\n");
             }
             ws->poss[ci] = intersect[sym];
-            requeue_cell_groups(lay, ws, ci);
+            requeue_groups(lay, ws, ci);
           }
         }
       }
@@ -562,7 +526,7 @@ try_remote_stragglers(int gi,
               fprintf(stderr, ">\n");
             }
             ws->poss[cj] &= ~ws->poss[ci];
-            requeue_cell_groups(lay, ws, cj);
+            requeue_groups(lay, ws, cj);
           }
         }
       }
@@ -573,7 +537,6 @@ try_remote_stragglers(int gi,
 }
 
 /*}}}*/
-#if 0
 /*{{{ do_group() */
 static int
 do_group(int gi, struct layout *lay, struct ws *ws)
@@ -608,33 +571,35 @@ do_group(int gi, struct layout *lay, struct ws *ws)
   return 1; /* Success */
 }
 /*}}}*/
-#endif
 /*{{{ do_uniques() */
 static int
-try_onlyopt(int ci, struct layout *lay, struct ws *ws)
+do_uniques(struct layout *lay, struct ws *ws)
 {
+  int ic;
   int NC;
   int nb;
   NC = lay->nc;
-  if (ws->state[ci] < 0) {
-    nb = count_bits(ws->poss[ci]);
-    if (nb == 0) {
-      if (ws->options & OPT_VERBOSE) {
-        fprintf(stderr, "Cell <%s> has no options left\n", lay->cells[ci].name);
-      }
-      return 0;
-    } else if (nb == 1) {
-      int sym = decode(ws->poss[ci]);
-      if (ws->options & OPT_VERBOSE) {
-        fprintf(stderr, "Allocate <%c> to <%s> (only option)\n",
-            lay->symbols[sym], lay->cells[ci].name);
-      }
-      --ws->n_todo;
-      allocate(lay, ws, 0, ci, sym);
-      if (ws->options & OPT_HINT) {
-        free_ws(ws);
-        free_layout(lay);
-        exit(0);
+  for (ic=0; ic<NC; ic++) {
+    if (ws->state[ic] < 0) {
+      nb = count_bits(ws->poss[ic]);
+      if (nb == 0) {
+        if (ws->options & OPT_VERBOSE) {
+          fprintf(stderr, "Cell <%s> has no options left\n", lay->cells[ic].name);
+        }
+        return 0;
+      } else if (nb == 1) {
+        int sym = decode(ws->poss[ic]);
+        if (ws->options & OPT_VERBOSE) {
+          fprintf(stderr, "Allocate <%c> to <%s> (only option)\n",
+              lay->symbols[sym], lay->cells[ic].name);
+        }
+        --ws->n_todo;
+        allocate(lay, ws, 0, ic, sym);
+        if (ws->options & OPT_HINT) {
+          free_ws(ws);
+          free_layout(lay);
+          exit(0);
+        }
       }
     }
   }
@@ -729,47 +694,28 @@ speculate(struct layout *lay, struct ws *ws_in)
 static int inner_infer(struct layout *lay, struct ws *ws)/*{{{*/
 {
   int NC, NG, NS;
-  int gi, ci;
+  int gi;
   int result;
 
   NC = lay->nc;
   NG = lay->ng;
   NS = lay->ns;
 
-
   while (1) {
-    if ((ws->options & OPT_ONLYOPT_FIRST) &&
-        ((ci = dequeue(ws->onlyopt_q)) >= 0)) {
-      try_onlyopt(ci, lay, ws);
-      continue;
-    } else if ((gi = dequeue(ws->block_q)) >= 0) {
-      if (try_group_allocate(gi, lay, ws) == 0) {
+    while ((gi = dequeue(ws->scan_q)) >= 0) {
+      if (!do_group(gi, lay, ws)) {
         result = 0;
         goto get_out;
       }
-      continue;
-    } else if ((gi = dequeue(ws->line_q)) >= 0) {
-      if (try_group_allocate(gi, lay, ws) == 0) {
+    }
+    if (!(ws->options & OPT_NO_ONLYOPT)) {
+      if (!do_uniques(lay, ws)) {
         result = 0;
         goto get_out;
       }
-      continue;
-    } else if ((gi = dequeue(ws->subset_q)) >= 0) {
-      try_subsets(gi, lay, ws);
-      continue;
-    } else if ((ci = dequeue(ws->onlyopt_q)) >= 0) {
-      try_onlyopt(ci, lay, ws);
-      continue;
-    } else if ((gi = dequeue(ws->remote_q)) >= 0) {
-      try_remote_stragglers(gi, lay, ws);
-      continue;
-    } else if ((gi = dequeue(ws->near_q)) >= 0) {
-      try_near_stragglers(gi, lay, ws);
-      continue;
     }
 
-    /* If we get here, all the queues have become empty. */
-    break;
+    if (empty_p(ws->scan_q)) break;
   }
 
   if (ws->n_todo == 0) {

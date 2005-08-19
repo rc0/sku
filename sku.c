@@ -75,7 +75,7 @@ static void apply_level(const char *level, int *options, int *reduce_req_n)/*{{{
     OPT_NO_NEAR,
     0
   };
-      
+
   if (level[0]) {
     lo = level[0] - '0';
     if (level[1]) {

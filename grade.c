@@ -12,8 +12,8 @@ const struct solve_option solve_options[N_SOLVE_OPTIONS] = {/*{{{*/
   { OPT_NO_LINES,   "Lines" },
   { OPT_NO_SUBSETS, "Subsets" },
   { OPT_NO_ONLYOPT, "Only option" },
-  { OPT_NO_NEAR,    "Near stragglers" },
-  { OPT_NO_REMOTE,  "Remote stragglers" }
+  { OPT_NO_REMOTE,  "Remote stragglers" },
+  { OPT_NO_NEAR,    "Near stragglers" }
 };
 /*}}}*/
 void grade_find_sol_reqs(struct layout *lay, int *state, int options, char *result, char *min_result)/*{{{*/
