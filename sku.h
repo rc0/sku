@@ -109,7 +109,7 @@ extern void show_symbols_in_set(int ns, const char *symbols, int bitmap);
 extern void setup_terminals(struct layout *lay);
 
 /* In infer.c */
-int infer(struct layout *lay, int *state, int *order, int iter, int solvepos, int options);
+int infer(struct layout *lay, int *state, int *order, int options);
 
 /* In superlayout.c */
 extern void superlayout_5(struct super_layout *superlay);

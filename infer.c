@@ -74,35 +74,112 @@ static int dequeue(struct queue *q)/*{{{*/
 
 /* ============================================================================ */
 
-/* Rewrite */
+struct ws {/*{{{*/
+  int nc, ng, ns;
+
+  int *poss;
+  int *todo;
+  int solvepos;
+  int spec_depth;
+  int n_todo;
+
+  /* Pointers/values passed in at the outer level. */
+  int options;
+  int *order;
+  
+  int *state;
+
+  /* Queues for what to scan next. */
+  struct queue *scan_q;
+};
+/*}}}*/
+static struct ws *make_ws(int nc, int ng, int ns)/*{{{*/
+{
+  struct ws *ws = new(struct ws);
+  int fill;
+  int i;
+
+  ws->nc = nc;
+  ws->ng = ng;
+  ws->ns = ns;
+  ws->spec_depth = 0;
+
+  fill = (1<<ns) - 1;
+  ws->todo = new_array(int, ng);
+  ws->poss = new_array(int, nc);
+  ws->n_todo = 0;
+  for (i=0; i<ng; i++) ws->todo[i] = fill;
+  for (i=0; i<nc; i++) ws->poss[i] = fill;
+
+  ws->scan_q = mk_queue(ng);
+  
+  return ws;
+}
+/*}}}*/
+static int *copy_array(int n, int *data)/*{{{*/
+{
+  int *result;
+  result = new_array(int, n);
+  memcpy(result, data, n * sizeof(int));
+  return result;
+}
+/*}}}*/
+static struct ws *clone_ws(const struct ws *src)/*{{{*/
+{
+  struct ws *ws;
+  ws = new(struct ws);
+  ws->nc = src->nc;
+  ws->ng = src->ng;
+  ws->ns = src->ns;
+  ws->spec_depth = 1 + src->spec_depth;
+  ws->n_todo = src->n_todo;
+  ws->solvepos = src->solvepos;
+  ws->poss = copy_array(src->nc, src->poss); 
+  ws->todo = copy_array(src->ng, src->todo);
+  ws->options = src->options;
+  ws->order = src->order;
+  /* Not sure about this. */
+  ws->state = NULL;
+
+  /* When we need to clone, we know the queues must be empty! */
+  ws->scan_q = mk_queue(src->ng);
+  return ws;
+}
+/*}}}*/
+static void free_ws(struct ws *ws)/*{{{*/
+{
+  free(ws->poss);
+  free(ws->todo);
+  rm_queue(ws->scan_q);
+  free(ws);
+}
+/*}}}*/
+
+/* ============================================================================ */
+
+static int inner_infer(struct layout *lay, struct ws *ws);
+
+/* ============================================================================ */
+
 /*{{{ requeue_groups() */
 static void
 requeue_groups(struct layout *lay,
-               struct queue *scan_q,
+               struct ws *ws,
                int ic)
 {
   int i;
   struct cell *cell = lay->cells + ic;
   for (i=0; i<NDIM; i++) {
     int gi = cell->group[i];
-    if (gi >= 0) enqueue(scan_q, gi);
+    if (gi >= 0) enqueue(ws->scan_q, gi);
     else break;
   }
 }
   /*}}}*/
 
-
 /*{{{ allocate() */
 static void
-allocate(struct layout *lay,
-         int *state,
-         int *poss,
-         int *todo,
-         struct queue *scan_q,
-         int *order,
-         int *solvepos,
-         int ic,
-         int val)
+allocate(struct layout *lay, struct ws *ws, int is_init, int ic, int val)
 {
   int mask;
   int j, k;
@@ -113,33 +190,30 @@ allocate(struct layout *lay,
   mask = 1<<val;
   NS = lay->ns;
 
-  state[ic] = val;
-  other_poss = poss[ic] & ~mask;
-  poss[ic] = 0;
-  if (order) {
-    order[ic] = (*solvepos)++;
+  ws->state[ic] = val;
+  other_poss = ws->poss[ic] & ~mask;
+  ws->poss[ic] = 0;
+  if (!is_init && ws->order) {
+    ws->order[ic] = (ws->solvepos)++;
   }
 
   for (k=0; k<NDIM; k++) {
     int gg = lay->cells[ic].group[k];
     if (gg >= 0) {
-      todo[gg] &= ~mask;
-#if 0
-      fprintf(stderr, "  1. enqueue %s\n", lay->group_names[gg]);
-#endif
-      enqueue(scan_q, gg);
+      ws->todo[gg] &= ~mask;
+      enqueue(ws->scan_q, gg);
       base = lay->groups + gg*NS;
       for (j=0; j<NS; j++) {
         int jc;
         jc = base[j];
-        if (poss[jc] & mask) {
-          poss[jc] &= ~mask;
-          requeue_groups(lay, scan_q, jc);
+        if (ws->poss[jc] & mask) {
+          ws->poss[jc] &= ~mask;
+          requeue_groups(lay, ws, jc);
           if (lay->cells[ic].is_terminal) {
             lay->cells[ic].is_terminal = 0;
           }
         }
-        if (poss[jc] & other_poss) {
+        if (ws->poss[jc] & other_poss) {
           /* The discovery of state[ic] has contributed to eventually solving [jc],
            * so [ic] is now non-terminal. */
           if (lay->cells[ic].is_terminal) {
@@ -155,16 +229,7 @@ allocate(struct layout *lay,
 /*}}}*/
 /*{{{ try_group_allocate() */
 static int
-try_group_allocate(int gi,
-    struct layout *lay,
-    int *state,
-    int *poss,
-    int *todo,
-    struct queue *scan_q,
-    int *order,
-    int *solvepos,
-    int *n_todo,
-    int options)
+try_group_allocate(int gi, struct layout *lay, struct ws *ws)
 {
   /* Return 0 if the solution is broken,
    *        1 if we didn't allocate anything,
@@ -178,37 +243,34 @@ try_group_allocate(int gi,
   base = lay->groups + gi*NS;
   for (sym=0; sym<NS; sym++) {
     mask = 1<<sym;
-    if (todo[gi] & mask) {
+    if (ws->todo[gi] & mask) {
       int j, count, xic;
       xic = -1;
       count = 0;
       for (j=0; j<NS; j++) {
         int ic = base[j];
-        if (poss[ic] & mask) {
+        if (ws->poss[ic] & mask) {
           xic = ic;
           count++;
           if (count > 1) break;
         }
       }
       if (count == 0) {
-        if (options & OPT_VERBOSE) {
+        if (ws->options & OPT_VERBOSE) {
           fprintf(stderr, "Cannot allocate <%c> in <%s>\n",
               lay->symbols[sym], lay->group_names[gi]);
         }
         return 0;
       } else if (count == 1) {
-        if (options & OPT_VERBOSE) {
+        if (ws->options & OPT_VERBOSE) {
           fprintf(stderr, "Allocate <%c> to <%s> (allocate in <%s>)\n",
               lay->symbols[sym], lay->cells[xic].name, lay->group_names[gi]);
         }
-        --*n_todo;
-        allocate(lay, state, poss, todo, scan_q, order, solvepos, xic, sym);
+        --ws->n_todo;
+        allocate(lay, ws, 0, xic, sym);
         found_any = 1;
-        if (options & OPT_HINT) {
-          rm_queue(scan_q);
-          free(state);
-          free(todo);
-          free(poss);
+        if (ws->options & OPT_HINT) {
+          free_ws(ws);
           free_layout(lay);
           exit(0);
         }
@@ -224,14 +286,7 @@ try_group_allocate(int gi,
 static int
 try_subsets(int gi,
     struct layout *lay,
-    int *state,
-    int *poss,
-    int *todo,
-    struct queue *scan_q,
-    int *order,
-    int *solvepos,
-    int *n_todo,
-    int options)
+    struct ws *ws)
 {
   /* Couldn't do any allocates in the group.
    * So try the more sophisticated analysis:
@@ -257,7 +312,7 @@ try_subsets(int gi,
   base = lay->groups + gi*NS;
   for (sym=0; sym<NS; sym++) {
     int mask = (1 << sym);
-    if (todo[gi] & mask) {
+    if (ws->todo[gi] & mask) {
       int j;
       int found_something = 0;
       memset(flags, 0, NC);
@@ -265,7 +320,7 @@ try_subsets(int gi,
       n_poss_cells = 0;
       for (j=0; j<NS; j++) {
         int ic = base[j];
-        if (poss[ic] & mask) {
+        if (ws->poss[ic] & mask) {
           int m;
           ++n_poss_cells;
           flags[ic] = 1;
@@ -286,28 +341,17 @@ try_subsets(int gi,
           for (m=0; m<NS; m++) {
             int ic = base[m];
             if (!flags[ic]) { /* cell not in the original group. */
-              if (poss[ic] & mask) {
-                if (options & OPT_VERBOSE) {
+              if (ws->poss[ic] & mask) {
+                if (ws->options & OPT_VERBOSE) {
                   fprintf(stderr, "Removing <%c> from <%s> (in <%s> due to placement in <%s>)\n",
                       lay->symbols[sym], lay->cells[ic].name,
                       lay->group_names[j], lay->group_names[gi]);
                 }
-                poss[ic] &= ~mask;
-                requeue_groups(lay, scan_q, ic);
+                ws->poss[ic] &= ~mask;
+                requeue_groups(lay, ws, ic);
                 found_something = 1;
                 did_anything = 1;
               }
-            }
-          }
-        }
-      }
-      if (0 && found_something) {
-        /* Mark the cells that caused the derivation as non-terminal */
-        for (j=0; j<NC; j++) {
-          if (flags[j]) {
-            if (lay->cells[j].is_terminal) {
-              lay->cells[j].is_terminal = 0;
-              fprintf(stderr, "Clearing terminal status of <%s>\n", lay->cells[j].name);
             }
           }
         }
@@ -324,14 +368,7 @@ try_subsets(int gi,
 static int
 try_near_stragglers(int gi,
     struct layout *lay,
-    int *state,
-    int *poss,
-    int *todo,
-    struct queue *scan_q,
-    int *order,
-    int *solvepos,
-    int *n_todo,
-    int options)
+    struct ws *ws)
 {
   /* 
    * Deal with this case: suppose the symbols 2,3,5,6 are unallocated within
@@ -365,8 +402,8 @@ try_near_stragglers(int gi,
     mask = 1<<sym;
     for (cell=0; cell<NS; cell++) {
       ci = base[cell];
-      if (poss[ci] & mask) {
-        intersect[sym] &= poss[ci];
+      if (ws->poss[ci] & mask) {
+        intersect[sym] &= ws->poss[ci];
         poss_map[sym] |= (1<<cell);
       }
     }
@@ -394,16 +431,16 @@ try_near_stragglers(int gi,
       for (cell=0; cell<NS; cell++) {
         if (poss_map[sym] & (1<<cell)) {
           int ci = base[cell];
-          if (poss[ci] != intersect[sym]) {
-            if (options & OPT_VERBOSE) {
+          if (ws->poss[ci] != intersect[sym]) {
+            if (ws->options & OPT_VERBOSE) {
               fprintf(stderr, "Removing <");
-              show_symbols_in_set(NS, lay->symbols, poss[ci] & ~intersect[sym]);
+              show_symbols_in_set(NS, lay->symbols, ws->poss[ci] & ~intersect[sym]);
               fprintf(stderr, "> from <%s>, must be one of <", lay->cells[ci].name);
               show_symbols_in_set(NS, lay->symbols, intersect[sym]);
               fprintf(stderr, ">\n");
             }
-            poss[ci] = intersect[sym];
-            requeue_groups(lay, scan_q, ci);
+            ws->poss[ci] = intersect[sym];
+            requeue_groups(lay, ws, ci);
           }
         }
       }
@@ -422,14 +459,7 @@ examine_next_symbol:
 static int
 try_remote_stragglers(int gi,
     struct layout *lay,
-    int *state,
-    int *poss,
-    int *todo,
-    struct queue *scan_q,
-    int *order,
-    int *solvepos,
-    int *n_todo,
-    int options)
+    struct ws *ws)
 {
   /* 
    * Deal with this case: suppose the symbols 2,3,5 are unallocated within
@@ -458,34 +488,34 @@ try_remote_stragglers(int gi,
     for (i=0; i<NS-1; i++) {
       int count;
       ci = base[i];
-      if (!poss[ci]) continue;
+      if (!ws->poss[ci]) continue;
       count = 1; /* including the 'i' cell!! */
       for (j=i+1; j<NS; j++) {
         cj = base[j];
-        if (poss[ci] == poss[cj]) {
+        if (ws->poss[ci] == ws->poss[cj]) {
           ++count;
         }
       }
       /* count==1 is a normal allocate done elsewhere! */
-      if ((count > 1) && (count == count_bits(poss[ci]))) {
+      if ((count > 1) && (count == count_bits(ws->poss[ci]))) {
         /* got one. */
         for (j=0; j<NS; j++) {
           cj = base[j];
-          if ((poss[cj] != poss[ci]) && (poss[cj] & poss[ci])) {
+          if ((ws->poss[cj] != ws->poss[ci]) && (ws->poss[cj] & ws->poss[ci])) {
             did_anything = did_anything_this_iter = 1;
-            if (options & OPT_VERBOSE) {
+            if (ws->options & OPT_VERBOSE) {
               int k, fk;
               fprintf(stderr, "Removing <");
-              show_symbols_in_set(NS, lay->symbols, poss[cj] & poss[ci]);
+              show_symbols_in_set(NS, lay->symbols, ws->poss[cj] & ws->poss[ci]);
               fprintf(stderr, "> from <%s:", lay->cells[cj].name);
-              show_symbols_in_set(NS, lay->symbols, poss[cj]);
+              show_symbols_in_set(NS, lay->symbols, ws->poss[cj]);
               fprintf(stderr, ">, because <");
-              show_symbols_in_set(NS, lay->symbols, poss[ci]);
+              show_symbols_in_set(NS, lay->symbols, ws->poss[ci]);
               fprintf(stderr, "> must be in <");
               fk = 1;
               for (k=0; k<NS; k++) {
                 int ck = base[k];
-                if (poss[ck] == poss[ci]) {
+                if (ws->poss[ck] == ws->poss[ci]) {
                   if (!fk) {
                     fprintf(stderr, ",");
                   }
@@ -495,8 +525,8 @@ try_remote_stragglers(int gi,
               }
               fprintf(stderr, ">\n");
             }
-            poss[cj] &= ~poss[ci];
-            requeue_groups(lay, scan_q, cj);
+            ws->poss[cj] &= ~ws->poss[ci];
+            requeue_groups(lay, ws, cj);
           }
         }
       }
@@ -509,41 +539,32 @@ try_remote_stragglers(int gi,
 /*}}}*/
 /*{{{ do_group() */
 static int
-do_group(int gi,
-         struct layout *lay,
-         int *state,
-         int *poss,
-         int *todo,
-         struct queue *scan_q,
-         int *order,
-         int *solvepos,
-         int *n_todo,
-         int options)
+do_group(int gi, struct layout *lay, struct ws *ws)
 {
   /* Return 0 if something went wrong, 1 if it was OK.  */
 
   int status;
 
   /* Don't continue if it's a row or column and we don't want that */
-  if ((options & OPT_NO_LINES) && (lay->is_block[gi] == 0)) return 1;
+  if ((ws->options & OPT_NO_LINES) && (lay->is_block[gi] == 0)) return 1;
 
   /* Group will get enqueued when the final symbol is allocated; we can exit
    * right away when it next gets scanned. */
-  if (todo[gi] == 0) return 1;
+  if (ws->todo[gi] == 0) return 1;
 
-  status = try_group_allocate(gi, lay, state, poss, todo, scan_q, order, solvepos, n_todo, options);
+  status = try_group_allocate(gi, lay, ws);
   if (!status) return status;
 
-  if ((status == 1) && !(options & OPT_NO_SUBSETS)) {
-    status = try_subsets(gi, lay, state, poss, todo, scan_q, order, solvepos, n_todo, options);
+  if ((status == 1) && !(ws->options & OPT_NO_SUBSETS)) {
+    status = try_subsets(gi, lay, ws);
   }
 
-  if ((status == 1) && !(options & OPT_NO_REMOTE)) {
-    status = try_remote_stragglers(gi, lay, state, poss, todo, scan_q, order, solvepos, n_todo, options);
+  if ((status == 1) && !(ws->options & OPT_NO_REMOTE)) {
+    status = try_remote_stragglers(gi, lay, ws);
   }
  
-  if ((status == 1) && !(options & OPT_NO_NEAR)) {
-    status = try_near_stragglers(gi, lay, state, poss, todo, scan_q, order, solvepos, n_todo, options);
+  if ((status == 1) && !(ws->options & OPT_NO_NEAR)) {
+    status = try_near_stragglers(gi, lay, ws);
   }
   
   /* Add new infererence techniques here, if status==1 */
@@ -552,39 +573,30 @@ do_group(int gi,
 /*}}}*/
 /*{{{ do_uniques() */
 static int
-do_uniques(struct layout *lay,
-           int *state,
-           int *poss,
-           int *todo,
-           struct queue *scan_q,
-           int *order,
-           int *solvepos,
-           int *n_todo,
-           int options)
+do_uniques(struct layout *lay, struct ws *ws)
 {
   int ic;
   int NC;
   int nb;
   NC = lay->nc;
   for (ic=0; ic<NC; ic++) {
-    if (state[ic] < 0) {
-      nb = count_bits(poss[ic]);
+    if (ws->state[ic] < 0) {
+      nb = count_bits(ws->poss[ic]);
       if (nb == 0) {
-        fprintf(stderr, "Cell <%s> has no options left\n", lay->cells[ic].name);
+        if (ws->options & OPT_VERBOSE) {
+          fprintf(stderr, "Cell <%s> has no options left\n", lay->cells[ic].name);
+        }
         return 0;
       } else if (nb == 1) {
-        int sym = decode(poss[ic]);
-        if (options & OPT_VERBOSE) {
+        int sym = decode(ws->poss[ic]);
+        if (ws->options & OPT_VERBOSE) {
           fprintf(stderr, "Allocate <%c> to <%s> (only option)\n",
               lay->symbols[sym], lay->cells[ic].name);
         }
-        --*n_todo;
-        allocate(lay, state, poss, todo, scan_q, order, solvepos, ic, sym);
-        if (options & OPT_HINT) {
-          rm_queue(scan_q);
-          free(state);
-          free(todo);
-          free(poss);
+        --ws->n_todo;
+        allocate(lay, ws, 0, ic, sym);
+        if (ws->options & OPT_HINT) {
+          free_ws(ws);
           free_layout(lay);
           exit(0);
         }
@@ -622,12 +634,7 @@ select_minimal_cell(struct layout *lay,
 /*}}}*/
 /*{{{ speculate() */
 static int
-speculate(struct layout *lay,
-          int *state,
-          int *poss,
-          int *order,
-          int solvepos,
-          int options)
+speculate(struct layout *lay, struct ws *ws_in)
 {
   /* Called when all else fails and we have to guess a cell but be able to back
    * out the guess if it goes wrong. */
@@ -638,9 +645,9 @@ speculate(struct layout *lay,
   int *scratch, *solution;
   int n_sol, total_n_sol;
 
-  ic = select_minimal_cell(lay, state, poss, 1);
+  ic = select_minimal_cell(lay, ws_in->state, ws_in->poss, 1);
   if (ic < 0) {
-    ic = select_minimal_cell(lay, state, poss, 0);
+    ic = select_minimal_cell(lay, ws_in->state, ws_in->poss, 0);
   }
   if (ic < 0) {
     return 0;
@@ -655,33 +662,32 @@ speculate(struct layout *lay,
   for (i=0; i<NS; i++) {
     int ii = (i + start_point) % NS;
     int mask = 1<<ii;
-    if (mask & poss[ic]) {
-      memcpy(scratch, state, NC * sizeof(int));
-      scratch[ic] = ii;
-      n_sol = infer(lay, scratch, order, 0, solvepos, options);
+    if (mask & ws_in->poss[ic]) {
+      struct ws *ws;
+      ws = clone_ws(ws_in);
+      memcpy(scratch, ws_in->state, NC * sizeof(int));
+      ws->state = scratch;
+      --ws->n_todo;
+      allocate(lay, ws, 0, ic, ii);
+      n_sol = inner_infer(lay, ws);
       if (n_sol > 0) {
         memcpy(solution, scratch, NC * sizeof(int));
         total_n_sol += n_sol;
-        if (options & OPT_FIRST_ONLY) break;
+        if (ws_in->options & OPT_FIRST_ONLY) break;
+      } else {
       }
-      if ((options & OPT_STOP_ON_2) && (total_n_sol >= 2)) break;
+      if ((ws_in->options & OPT_STOP_ON_2) && (total_n_sol >= 2)) break;
     }
   }
   free(scratch);
-  memcpy(state, solution, NC * sizeof(int));
+  memcpy(ws_in->state, solution, NC * sizeof(int));
   free(solution);
   return total_n_sol;
 }
 /*}}}*/
-int infer(struct layout *lay, int *state, int *order, int iter, int solvepos, int options)/*{{{*/
+static int inner_infer(struct layout *lay, struct ws *ws)/*{{{*/
 {
-  int *todo;
-  int *poss;
-  struct queue *scan_q;
   int NC, NG, NS;
-  int FILL;
-  int i;
-  int n_todo; /* Number of cells still to solve for. */
   int gi;
   int result;
 
@@ -689,59 +695,36 @@ int infer(struct layout *lay, int *state, int *order, int iter, int solvepos, in
   NG = lay->ng;
   NS = lay->ns;
 
-  scan_q = mk_queue(NG);
-  todo = new_array(int, NG);
-  poss = new_array(int, NC);
-
-  FILL = (1 << NS) - 1;
-  n_todo = 0;
-  for (i=0; i<NG; i++) {
-    todo[i] = FILL;
-  }
-  for (i=0; i<NC; i++) {
-    poss[i] = FILL;
-  }
-  for (i=0; i<NC; i++) {
-    if (state[i] >= 0) {
-      /* This will clear the poss bits on cells in the same groups, remove todo
-       * bits, and enqueue groups that need scanning immediately at the start
-       * of the search. */
-      allocate(lay, state, poss, todo, scan_q, NULL, NULL, i, state[i]);
-    } else {
-      n_todo++;
-    }
-  }
-
   while (1) {
-    while ((gi = dequeue(scan_q)) >= 0) {
-      if (!do_group(gi, lay, state, poss, todo, scan_q, order, &solvepos, &n_todo, options)) {
+    while ((gi = dequeue(ws->scan_q)) >= 0) {
+      if (!do_group(gi, lay, ws)) {
         result = 0;
         goto get_out;
       }
     }
-    if (!(options & OPT_NO_ONLYOPT)) {
-      if (!do_uniques(lay, state, poss, todo, scan_q, order, &solvepos, &n_todo, options)) {
+    if (!(ws->options & OPT_NO_ONLYOPT)) {
+      if (!do_uniques(lay, ws)) {
         result = 0;
         goto get_out;
       }
     }
 
-    if (empty_p(scan_q)) break;
+    if (empty_p(ws->scan_q)) break;
   }
 
-  if (n_todo == 0) {
-    if ((options & (OPT_SPECULATE | OPT_SHOW_ALL)) == (OPT_SPECULATE | OPT_SHOW_ALL)) {
+  if (ws->n_todo == 0) {
+    if ((ws->options & (OPT_SPECULATE | OPT_SHOW_ALL)) == (OPT_SPECULATE | OPT_SHOW_ALL)) {
       /* ugh, ought to be via an argument */
       static int sol_no = 1;
       printf("Solution %d:\n", sol_no++);
-      display(stdout, lay, state);
+      display(stdout, lay, ws->state);
       printf("\n");
     }
     result = 1;
-  } else if (n_todo > 0) {
+  } else if (ws->n_todo > 0) {
     /* Didn't get a solution - decide whether to speculate or not. */
-    if (options & OPT_SPECULATE) {
-      result = speculate(lay, state, poss, order, solvepos, options);
+    if (ws->options & OPT_SPECULATE) {
+      result = speculate(lay, ws);
     } else {
       result = 0;
     }
@@ -751,9 +734,41 @@ int infer(struct layout *lay, int *state, int *order, int iter, int solvepos, in
   }
 
 get_out:
-  rm_queue(scan_q);
-  free(todo);
-  free(poss);
+  return result;
+  
+}
+/*}}}*/
+int infer(struct layout *lay, int *state, int *order, int options)/*{{{*/
+{
+  int nc, ng, ns;
+  struct ws *ws;
+  int i;
+  int result;
+
+  nc = lay->nc;
+  ng = lay->ng;
+  ns = lay->ns;
+
+  ws = make_ws(nc, ng, ns);
+  ws->solvepos = 0;
+  ws->options = options;
+  ws->state = state;
+  ws->order = order;
+
+  for (i=0; i<nc; i++) {
+    if (state[i] >= 0) {
+      /* This will clear the poss bits on cells in the same groups, remove todo
+       * bits, and enqueue groups that need scanning immediately at the start
+       * of the search. */
+      allocate(lay, ws, 1, i, state[i]);
+    } else {
+      ++ws->n_todo;
+    }
+  }
+
+  result = inner_infer(lay, ws);
+
+  free_ws(ws);
   return result;
   
 }

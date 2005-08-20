@@ -8,7 +8,7 @@ void solve(int options)/*{{{*/
 
   read_grid(&lay, &state, options);
   setup_terminals(lay);
-  n_solutions = infer(lay, state, NULL, 0, 0, options);
+  n_solutions = infer(lay, state, NULL, options);
 
   if (n_solutions == 0) {
     fprintf(stderr, "The puzzle had no solutions.\n"
@@ -39,7 +39,7 @@ void solve_any(int options)/*{{{*/
 
   read_grid(&lay, &state, options);
   setup_terminals(lay);
-  n_solutions = infer(lay, state, NULL, 0, 0, OPT_SPECULATE | OPT_FIRST_ONLY | options);
+  n_solutions = infer(lay, state, NULL, OPT_SPECULATE | OPT_FIRST_ONLY | options);
 
   if (n_solutions == 0) {
     fprintf(stderr, "The puzzle had no solutions.\n"

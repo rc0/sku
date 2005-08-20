@@ -88,7 +88,7 @@ void mark_cells(int grey_cells, int options)/*{{{*/
     memset(order, 0, lay->nc * sizeof(int));
     
     setup_terminals(lay);
-    infer(lay, copy, order, 0, 0, OPT_SPECULATE);
+    infer(lay, copy, order, OPT_SPECULATE);
     weed_terminals(lay, order);
 
     shade = new_array(struct intpair, lay->nc);
