@@ -274,12 +274,45 @@ static struct ws *clone_ws(const struct ws *src)/*{{{*/
   /* Not sure about this. */
   ws->state = NULL;
 
-  /* When we need to clone, we know the queues must be empty! */
-  fprintf(stderr, "FIXME : I don't know how to handle cloning the queues in speculate() yet!!\n");
+  /* When we need to clone, we know the queues must be empty!  We share this
+   * with the outer context(s) since sharing is cheaper. */
+  ws->base_q = src->base_q;
+  ws->base_cell_q = src->base_cell_q;
+  ws->base_line_q = src->base_line_q;
+  ws->base_block_q = src->base_block_q;
+  ws->group_links = src->group_links;
+  ws->cell_links = src->cell_links;
+  
 #if 0
   ws->scan_q = mk_queue(src->ng);
 #endif
   return ws;
+}
+/*}}}*/
+static void free_cloned_ws(struct layout *lay, struct ws *ws)/*{{{*/
+{
+  struct queue *q;
+  int i;
+  
+  /* Clean queues. */
+  q = ws->base_q;
+  while (q) {
+    struct link *lk = &q->links;
+    lk->next = lk->prev = lk;
+    q = q->next_to_run;
+  }
+  for (i=0; i<lay->ng; i++) {
+    struct link *lk = ws->group_links + i;
+    lk->q = NULL;
+  }
+  for (i=0; i<lay->nc; i++) {
+    struct link *lk = ws->cell_links + i;
+    lk->q = NULL;
+  }
+  
+  free(ws->poss);
+  free(ws->todo);
+  free(ws);
 }
 /*}}}*/
 static void free_ws(struct ws *ws)/*{{{*/
@@ -294,7 +327,6 @@ static void free_ws(struct ws *ws)/*{{{*/
     free_queue(q);
     q = nq;
   }
-  /* TODO : whether we do this depends on how the cloning of the 'ws' goes for speculation. */
   free(ws->group_links);
   free(ws->cell_links);
 
@@ -605,7 +637,7 @@ try_near_stragglers(int gi,
               show_symbols_in_set(NS, lay->symbols, ws->poss[ci] & ~intersect[sym]);
               fprintf(stderr, "> from <%s>, must be one of <", lay->cells[ci].name);
               show_symbols_in_set(NS, lay->symbols, intersect[sym]);
-              fprintf(stderr, ">\n");
+              fprintf(stderr, "> in <%s>\n", lay->group_names[gi]);
             }
             ws->poss[ci] = intersect[sym];
             requeue_cell(ci, lay, ws);
@@ -693,7 +725,7 @@ try_remote_stragglers(int gi,
                   fprintf(stderr, "%s", lay->cells[ck].name);
                 }
               }
-              fprintf(stderr, ">\n");
+              fprintf(stderr, "> in <%s>\n", lay->group_names[gi]);
             }
             ws->poss[cj] &= ~ws->poss[ci];
             requeue_cell(cj, lay, ws);
@@ -880,15 +912,15 @@ speculate(struct layout *lay, struct ws *ws_in)
         memcpy(solution, scratch, NC * sizeof(int));
         total_n_sol += n_sol;
         if (ws_in->options & OPT_FIRST_ONLY) {
-          free_ws(ws);
+          free_cloned_ws(lay, ws);
           break;
         }
       }
       if ((ws_in->options & OPT_STOP_ON_2) && (total_n_sol >= 2)) {
-        free_ws(ws);
+        free_cloned_ws(lay, ws);
         break;
       }
-      free_ws(ws);
+      free_cloned_ws(lay, ws);
     }
   }
   free(scratch);
