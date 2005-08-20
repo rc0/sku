@@ -2,6 +2,7 @@
 
 /* ============================================================================ */
 
+#if 0
 struct queue/*{{{*/
 {
   int ri;       /* read cursor */
@@ -71,6 +72,102 @@ static int dequeue(struct queue *q)/*{{{*/
   }
 }
 /*}}}*/
+#endif
+
+/* ============================================================================ */
+
+struct ws;
+struct queue;
+
+struct link {/*{{{*/
+  /* Node for holding a cell or group index in a queue. */
+  struct link *next;
+  struct link *prev;
+  int index;
+  struct queue *q; /* which queue the cell is on, NULL o/w */
+};
+/*}}}*/
+
+/* Returns -1 if an error has been detected,
+ * 0 if no work got done,
+ * 1 if work was done. */
+typedef int (*WORKER)(int, struct layout *, struct ws *);
+  
+struct queue {/*{{{*/
+  struct link links; /* .index ignored */
+  struct queue *next_to_run;
+  struct queue *next_to_push;
+  WORKER worker;
+};
+/*}}}*/
+static struct queue *mk_queue(WORKER worker, struct queue *next_to_run, struct queue *next_to_push)/*{{{*/
+{
+  struct queue *x;
+  x = new(struct queue);
+  x->links.next = x->links.prev = &x->links;
+  x->worker = worker;
+  x->next_to_run = next_to_run;
+  x->next_to_push = next_to_push;
+  return x;
+}
+/*}}}*/
+static void free_queue(struct queue *x)/*{{{*/
+{
+  free(x);
+}
+/*}}}*/
+static struct link *dequeue(struct queue *q) /*{{{*/
+{
+  struct link *base, *first;
+  base = &q->links;
+  first = base->next;
+  if (first == base) {
+    /* Empty queue */
+    return NULL;
+  }
+  first->next->prev = base;
+  base->next = first->next;
+  first->next = first->prev = first;
+  first->q = NULL;
+  return first;
+}
+/*}}}*/
+static void enqueue(struct link *lk, struct queue *q)/*{{{*/
+{
+  struct link *base;
+  if (lk->q) {
+    fprintf(stderr, "Can't enqueue %d, it's already on a queue!!\n", lk->index);
+    exit(2);
+  }
+  base = &q->links;
+  lk->prev = base->prev;
+  lk->next = base;
+  base->prev->next = lk;
+  base->prev = lk;
+  lk->q = q;
+}
+/*}}}*/
+static void move_to_queue(struct link *lk, struct queue *to_q)/*{{{*/
+{
+  struct link *base;
+  if (lk->q == to_q) {
+    return;
+  }
+
+  /* Take off old queue. */
+  if (lk->q) {
+    lk->next->prev = lk->prev;
+    lk->prev->next = lk->next;
+  }
+  /* Push onto new queue */
+  base = &to_q->links;
+  lk->prev = base->prev;
+  lk->next = base;
+  lk->q = to_q;
+  base->prev->next = lk;
+  base->prev = lk;
+}
+/*}}}*/
 
 /* ============================================================================ */
 
@@ -90,7 +187,11 @@ struct ws {/*{{{*/
   int *state;
 
   /* Queues for what to scan next. */
-  struct queue *scan_q;
+  struct queue *base_q;
+  struct queue *base_cell_q;
+  struct queue *base_group_q;
+  struct link *group_links;
+  struct link *cell_links;
 };
 /*}}}*/
 static struct ws *make_ws(int nc, int ng, int ns)/*{{{*/
@@ -111,8 +212,19 @@ static struct ws *make_ws(int nc, int ng, int ns)/*{{{*/
   for (i=0; i<ng; i++) ws->todo[i] = fill;
   for (i=0; i<nc; i++) ws->poss[i] = fill;
 
-  ws->scan_q = mk_queue(ng);
-  
+  ws->group_links = new_array(struct link, ng);
+  for (i=0; i<ng; i++) {
+    ws->group_links[i].next = ws->group_links[i].prev = &ws->group_links[i];
+    ws->group_links[i].index = i;
+    ws->group_links[i].q = NULL;
+  }
+  ws->cell_links = new_array(struct link, nc);
+  for (i=0; i<nc; i++) {
+    ws->cell_links[i].next = ws->cell_links[i].prev = &ws->cell_links[i];
+    ws->cell_links[i].index = i;
+    ws->cell_links[i].q = NULL;
+  }
+
   return ws;
 }
 /*}}}*/
@@ -142,15 +254,29 @@ static struct ws *clone_ws(const struct ws *src)/*{{{*/
   ws->state = NULL;
 
   /* When we need to clone, we know the queues must be empty! */
+  fprintf(stderr, "FIXME : I don't know how to handle cloning the queues in speculate() yet!!\n");
+#if 0
   ws->scan_q = mk_queue(src->ng);
+#endif
   return ws;
 }
 /*}}}*/
 static void free_ws(struct ws *ws)/*{{{*/
 {
+  struct queue *q;
   free(ws->poss);
   free(ws->todo);
-  rm_queue(ws->scan_q);
+
+  q = ws->base_q;
+  while (q) {
+    struct queue *nq = q->next_to_run;
+    free_queue(q);
+    q = nq;
+  }
+  /* TODO : whether we do this depends on how the cloning of the 'ws' goes for speculation. */
+  free(ws->group_links);
+  free(ws->cell_links);
+
   free(ws);
 }
 /*}}}*/
@@ -161,6 +287,13 @@ static int inner_infer(struct layout *lay, struct ws *ws);
 
 /* ============================================================================ */
 
+/*{{{ requeue_group() */
+static inline void
+requeue_group(int gi, struct layout *lay, struct ws *ws)
+{
+  move_to_queue(ws->group_links + gi, ws->base_group_q);
+}
+/*}}}*/
 /*{{{ requeue_groups() */
 static void
 requeue_groups(struct layout *lay,
@@ -171,11 +304,18 @@ requeue_groups(struct layout *lay,
   struct cell *cell = lay->cells + ic;
   for (i=0; i<NDIM; i++) {
     int gi = cell->group[i];
-    if (gi >= 0) enqueue(ws->scan_q, gi);
+    if (gi >= 0) requeue_group(gi, lay, ws);
     else break;
   }
 }
-  /*}}}*/
+/*}}}*/
+/*{{{ requeue_group() */
+static inline void
+requeue_cell(int ci, struct layout *lay, struct ws *ws)
+{
+  move_to_queue(ws->cell_links + ci, ws->base_cell_q);
+}
+/*}}}*/
 
 /*{{{ allocate() */
 static void
@@ -201,13 +341,14 @@ allocate(struct layout *lay, struct ws *ws, int is_init, int ic, int val)
     int gg = lay->cells[ic].group[k];
     if (gg >= 0) {
       ws->todo[gg] &= ~mask;
-      enqueue(ws->scan_q, gg);
+      requeue_group(gg, lay, ws);
       base = lay->groups + gg*NS;
       for (j=0; j<NS; j++) {
         int jc;
         jc = base[j];
         if (ws->poss[jc] & mask) {
           ws->poss[jc] &= ~mask;
+          requeue_cell(jc, lay, ws);
           requeue_groups(lay, ws, jc);
           if (lay->cells[ic].is_terminal) {
             lay->cells[ic].is_terminal = 0;
@@ -260,7 +401,7 @@ try_group_allocate(int gi, struct layout *lay, struct ws *ws)
           fprintf(stderr, "Cannot allocate <%c> in <%s>\n",
               lay->symbols[sym], lay->group_names[gi]);
         }
-        return 0;
+        return -1;
       } else if (count == 1) {
         if (ws->options & OPT_VERBOSE) {
           fprintf(stderr, "Allocate <%c> to <%s> (allocate in <%s>)\n",
@@ -278,7 +419,7 @@ try_group_allocate(int gi, struct layout *lay, struct ws *ws)
     }
   }
 
-  return found_any ? 2 : 1;
+  return found_any ? 1 : 0;
 
 }
 /*}}}*/
@@ -348,6 +489,7 @@ try_subsets(int gi,
                       lay->group_names[j], lay->group_names[gi]);
                 }
                 ws->poss[ic] &= ~mask;
+                requeue_cell(ic, lay, ws);
                 requeue_groups(lay, ws, ic);
                 found_something = 1;
                 did_anything = 1;
@@ -360,7 +502,7 @@ try_subsets(int gi,
   }
   free(counts);
   free(flags);
-  return did_anything ? 2 : 1;
+  return did_anything ? 1 : 0;
 }
 
 /*}}}*/
@@ -440,6 +582,7 @@ try_near_stragglers(int gi,
               fprintf(stderr, ">\n");
             }
             ws->poss[ci] = intersect[sym];
+            requeue_cell(ci, lay, ws);
             requeue_groups(lay, ws, ci);
           }
         }
@@ -451,7 +594,7 @@ examine_next_symbol:
 
   free(intersect);
   free(poss_map);
-  return did_anything ? 2 : 1;
+  return did_anything ? 1 : 0;
 }
 
 /*}}}*/
@@ -526,6 +669,7 @@ try_remote_stragglers(int gi,
               fprintf(stderr, ">\n");
             }
             ws->poss[cj] &= ~ws->poss[ci];
+            requeue_cell(cj, lay, ws);
             requeue_groups(lay, ws, cj);
           }
         }
@@ -533,10 +677,11 @@ try_remote_stragglers(int gi,
     }
   } while (did_anything_this_iter);
 
-  return did_anything ? 2 : 1;
+  return did_anything ? 1 : 0;
 }
 
 /*}}}*/
+#if 0
 /*{{{ do_group() */
 static int
 do_group(int gi, struct layout *lay, struct ws *ws)
@@ -604,6 +749,40 @@ do_uniques(struct layout *lay, struct ws *ws)
     }
   }
   return 1;
+}
+/*}}}*/
+#endif
+/*{{{ try_onlyopt() */
+static int
+try_onlyopt(int ic, struct layout *lay, struct ws *ws)
+{
+  int NC;
+  int nb;
+  NC = lay->nc;
+  if (ws->state[ic] < 0) {
+    nb = count_bits(ws->poss[ic]);
+    if (nb == 0) {
+      if (ws->options & OPT_VERBOSE) {
+        fprintf(stderr, "Cell <%s> has no options left\n", lay->cells[ic].name);
+      }
+      return -1;
+    } else if (nb == 1) {
+      int sym = decode(ws->poss[ic]);
+      if (ws->options & OPT_VERBOSE) {
+        fprintf(stderr, "Allocate <%c> to <%s> (only option)\n",
+            lay->symbols[sym], lay->cells[ic].name);
+      }
+      --ws->n_todo;
+      allocate(lay, ws, 0, ic, sym);
+      if (ws->options & OPT_HINT) {
+        free_ws(ws);
+        free_layout(lay);
+        exit(0);
+      }
+      return 1;
+    }
+  }
+  return 0;
 }
 /*}}}*/
 /*{{{ select_minimal_cell() */
@@ -694,28 +873,45 @@ speculate(struct layout *lay, struct ws *ws_in)
 static int inner_infer(struct layout *lay, struct ws *ws)/*{{{*/
 {
   int NC, NG, NS;
-  int gi;
   int result;
+  struct queue *q;
 
   NC = lay->nc;
   NG = lay->ng;
   NS = lay->ns;
 
-  while (1) {
-    while ((gi = dequeue(ws->scan_q)) >= 0) {
-      if (!do_group(gi, lay, ws)) {
-        result = 0;
-        goto get_out;
+  q = ws->base_q;
+  result = 0;
+  while (q) { /* i.e. we still have a queue left to look at */
+    struct link *lk;
+    lk = dequeue(q);
+    if (lk) {
+      int status;
+      status = (q->worker)(lk->index, lay, ws);
+      switch (status) {
+        case -1:
+          goto get_out;
+          break;
+        case 0:
+          /* Try applying a harder rule on this group (if it doesn't get moved
+           * back to the simplest queue first.) */
+          if (q->next_to_push) {
+            enqueue(lk, q->next_to_push);
+          }
+          break;
+        case 1:
+          /* If the worker made progress, start scanning from the easiest
+           * queue again. */
+          q = ws->base_q;
+          break;
+        default:
+          fprintf(stderr, "Oh dear, result=%d\n", result);
+          exit(2);
       }
+    } else {
+      /* queue became empty, look at the next one. */
+      q = q->next_to_run;
     }
-    if (!(ws->options & OPT_NO_ONLYOPT)) {
-      if (!do_uniques(lay, ws)) {
-        result = 0;
-        goto get_out;
-      }
-    }
-
-    if (empty_p(ws->scan_q)) break;
   }
 
   if (ws->n_todo == 0) {
@@ -761,6 +957,22 @@ int infer(struct layout *lay, int *state, int *order, int options)/*{{{*/
   ws->state = state;
   ws->order = order;
 
+  /* Set up work queues */
+  {
+    /* TODO : Eventually, make this plumbing dependent on what -E options the
+     * user has passed in. */
+    struct queue *near_q, *remote_q, *subset_q, *onlyopt_q, *line_q, *block_q;
+    near_q = mk_queue(try_near_stragglers, NULL, NULL);
+    remote_q = mk_queue(try_remote_stragglers, near_q, near_q);
+    subset_q = mk_queue(try_subsets, remote_q, remote_q);
+    onlyopt_q = mk_queue(try_onlyopt, subset_q, NULL);
+    line_q = mk_queue(try_group_allocate, onlyopt_q, subset_q);
+    block_q = mk_queue(try_group_allocate, line_q, line_q);
+    ws->base_q = block_q;
+    ws->base_group_q = block_q;
+    ws->base_cell_q = onlyopt_q;
+  }
+
   for (i=0; i<nc; i++) {
     if (state[i] >= 0) {
       /* This will clear the poss bits on cells in the same groups, remove todo
@@ -771,6 +983,7 @@ int infer(struct layout *lay, int *state, int *order, int options)/*{{{*/
       ++ws->n_todo;
     }
   }
+
 
   result = inner_infer(lay, ws);
 
