@@ -84,7 +84,8 @@ struct link {/*{{{*/
   struct link *next;
   struct link *prev;
   int index;
-  struct queue *q; /* which queue the cell is on, NULL o/w */
+  struct queue *q; /* which queue the link is on, NULL o/w */
+  struct queue *base_q; /* which queue the link has to go back to when its resouce is updated. */
 };
 /*}}}*/
 
@@ -189,7 +190,8 @@ struct ws {/*{{{*/
   /* Queues for what to scan next. */
   struct queue *base_q;
   struct queue *base_cell_q;
-  struct queue *base_group_q;
+  struct queue *base_line_q;
+  struct queue *base_block_q;
   struct link *group_links;
   struct link *cell_links;
 };
@@ -226,6 +228,25 @@ static struct ws *make_ws(int nc, int ng, int ns)/*{{{*/
   }
 
   return ws;
+}
+/*}}}*/
+static void set_base_queues(const struct layout *lay, struct ws *ws)/*{{{*/
+{
+  int gi, ci;
+  for (gi=0; gi<lay->ng; gi++) {
+    struct link *x;
+    x = ws->group_links + gi;
+    if (lay->is_block[gi]) {
+      x->base_q = ws->base_block_q;
+    } else {
+      x->base_q = ws->base_line_q;
+    }
+  }
+  for (ci=0; ci<lay->nc; ci++) {
+    struct link *x;
+    x = ws->cell_links + ci;
+    x->base_q = ws->base_cell_q;
+  }
 }
 /*}}}*/
 static int *copy_array(int n, int *data)/*{{{*/
@@ -288,10 +309,15 @@ static int inner_infer(struct layout *lay, struct ws *ws);
 /* ============================================================================ */
 
 /*{{{ requeue_group() */
-static inline void
+static void
 requeue_group(int gi, struct layout *lay, struct ws *ws)
 {
-  move_to_queue(ws->group_links + gi, ws->base_group_q);
+  struct link *lk = ws->group_links + gi;
+  if (lk->base_q)  {
+    move_to_queue(lk, lk->base_q);
+  } else {
+    /* No rules are available for this type of resource, ignore. */
+  }
 }
 /*}}}*/
 /*{{{ requeue_groups() */
@@ -310,7 +336,7 @@ requeue_groups(struct layout *lay,
 }
 /*}}}*/
 /*{{{ requeue_group() */
-static inline void
+static void
 requeue_cell(int ci, struct layout *lay, struct ws *ws)
 {
   move_to_queue(ws->cell_links + ci, ws->base_cell_q);
@@ -584,6 +610,7 @@ try_near_stragglers(int gi,
             ws->poss[ci] = intersect[sym];
             requeue_cell(ci, lay, ws);
             requeue_groups(lay, ws, ci);
+            did_anything = 1;
           }
         }
       }
@@ -959,19 +986,46 @@ int infer(struct layout *lay, int *state, int *order, int options)/*{{{*/
 
   /* Set up work queues */
   {
-    /* TODO : Eventually, make this plumbing dependent on what -E options the
-     * user has passed in. */
-    struct queue *near_q, *remote_q, *subset_q, *onlyopt_q, *line_q, *block_q;
-    near_q = mk_queue(try_near_stragglers, NULL, NULL);
-    remote_q = mk_queue(try_remote_stragglers, near_q, near_q);
-    subset_q = mk_queue(try_subsets, remote_q, remote_q);
-    onlyopt_q = mk_queue(try_onlyopt, subset_q, NULL);
-    line_q = mk_queue(try_group_allocate, onlyopt_q, subset_q);
-    block_q = mk_queue(try_group_allocate, line_q, line_q);
-    ws->base_q = block_q;
-    ws->base_group_q = block_q;
-    ws->base_cell_q = onlyopt_q;
+    struct queue *next_run, *next_cell_push, *next_line_push, *next_block_push, *next_group_push;
+    next_run = NULL;
+    next_cell_push = NULL;
+    next_group_push = NULL;
+
+    if (!(options & OPT_NO_NEAR)) {
+      struct queue *our_q = mk_queue(try_near_stragglers, next_run, next_group_push);
+      next_run = next_group_push = our_q;
+    }
+    if (!(options & OPT_NO_REMOTE)) {
+      struct queue *our_q = mk_queue(try_remote_stragglers, next_run, next_group_push);
+      next_run = next_group_push = our_q;
+    }
+    if (!(options & OPT_NO_SUBSETS)) {
+      struct queue *our_q = mk_queue(try_subsets, next_run, next_group_push);
+      next_run = next_group_push = our_q;
+    }
+    if (!(options & OPT_NO_ONLYOPT)) {
+      struct queue *our_q = mk_queue(try_onlyopt, next_run, next_cell_push);
+      next_run = next_cell_push = our_q;
+    }
+
+    next_block_push = next_group_push;
+    next_line_push  = next_group_push;
+    
+    if (!(options & OPT_NO_LINES)) {
+      struct queue *our_q = mk_queue(try_group_allocate, next_run, next_line_push);
+      next_run = next_line_push = our_q;
+    }
+    if (1) { /* allocate in blocks. */
+      struct queue *our_q = mk_queue(try_group_allocate, next_run, next_block_push);
+      next_run = next_block_push = our_q;
+    }
+    ws->base_q = next_run;
+    ws->base_block_q = next_block_push;
+    ws->base_line_q = next_line_push;
+    ws->base_cell_q = next_cell_push;
   }
+
+  set_base_queues(lay, ws);
 
   for (i=0; i<nc; i++) {
     if (state[i] >= 0) {

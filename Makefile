@@ -1,6 +1,6 @@
 CC := gcc
-#CFLAGS := -O2 -Wall -pg -fprofile-arcs -fno-inline
-CFLAGS := -g -Wall
+CFLAGS := -O2 -Wall -pg -fprofile-arcs -fno-inline
+#CFLAGS := -O2 -Wall
 
 PROG := sku
 OBJ := sku.o \
