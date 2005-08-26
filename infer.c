@@ -2,80 +2,6 @@
 
 /* ============================================================================ */
 
-#if 0
-struct queue/*{{{*/
-{
-  int ri;       /* read cursor */
-  int wi;       /* write cursor */
-  int n1;       /* n1=n+1; sizeof(slots)=n1, sizeof(flags)=n */
-  int *slots;   /* ring buffer containing queue */
-  int *flags;   /* flags indicating which groups are in the queue (avoid multiple entries) */
-};
-/*}}}*/
-static inline int empty_p(struct queue *q)/*{{{*/
-{
-  if (q->ri == q->wi)
-    return 1;
-  else
-    return 0;
-}
-/*}}}*/
-static struct queue *mk_queue(int n)/*{{{*/
-{
-  struct queue *result;
-  result = new(struct queue);
-  result->slots = new_array(int, 1+n);
-  result->flags = new_array(int, n);
-  result->n1 = n+1;
-  result->ri = result->wi = 0;
-  memset(result->flags, 0, n * sizeof(int));
-  return result;
-}
-/*}}}*/
-static void rm_queue(struct queue *q)/*{{{*/
-{
-  free(q->slots);
-  free(q->flags);
-  free(q);
-}
-/*}}}*/
-static void enqueue(struct queue *q, int x)/*{{{*/
-{
-  if (q->flags[x]) return; /* Already in queue */
-#if 0
-  fprintf(stderr, "    ENQ %d wi=%d\n", x, q->wi);
-#endif
-  q->slots[q->wi] = x;
-  q->flags[x] = 1;
-  ++q->wi;
-  if (q->wi == q->n1) q->wi = 0;
-  if (empty_p(q)) {
-    fprintf(stderr, "Queue has overflowed\n");
-    exit(1);
-  }
-}
-/*}}}*/
-static int dequeue(struct queue *q)/*{{{*/
-{
-  if (empty_p(q)) {
-    return -1;
-  } else {
-    int result = q->slots[q->ri];
-    ++q->ri;
-    if (q->ri == q->n1) q->ri = 0;
-    if (q->flags[result] == 0) {
-      fprintf(stderr, "Flag table out of sync\n");
-      exit(1);
-    }
-    q->flags[result] = 0;
-    return result;
-  }
-}
-/*}}}*/
-#endif
-
-/* ============================================================================ */
-
 struct ws;
 struct queue;
 
@@ -340,9 +266,7 @@ static int inner_infer(struct layout *lay, struct ws *ws);
 
 /* ============================================================================ */
 
-/*{{{ requeue_group() */
-static void
-requeue_group(int gi, struct layout *lay, struct ws *ws)
+static void requeue_group(int gi, struct layout *lay, struct ws *ws)/*{{{*/
 {
   struct link *lk = ws->group_links + gi;
   if (lk->base_q)  {
@@ -352,11 +276,7 @@ requeue_group(int gi, struct layout *lay, struct ws *ws)
   }
 }
 /*}}}*/
-/*{{{ requeue_groups() */
-static void
-requeue_groups(struct layout *lay,
-               struct ws *ws,
-               int ic)
+static void requeue_groups(struct layout *lay, struct ws *ws, int ic)/*{{{*/
 {
   int i;
   struct cell *cell = lay->cells + ic;
@@ -367,17 +287,13 @@ requeue_groups(struct layout *lay,
   }
 }
 /*}}}*/
-/*{{{ requeue_group() */
-static void
-requeue_cell(int ci, struct layout *lay, struct ws *ws)
+static void requeue_cell(int ci, struct layout *lay, struct ws *ws)/*{{{*/
 {
   move_to_queue(ws->cell_links + ci, ws->base_cell_q);
 }
 /*}}}*/
 
-/*{{{ allocate() */
-static void
-allocate(struct layout *lay, struct ws *ws, int is_init, int ic, int val)
+static void allocate(struct layout *lay, struct ws *ws, int is_init, int ic, int val)/*{{{*/
 {
   int mask;
   int j, k;
@@ -426,9 +342,7 @@ allocate(struct layout *lay, struct ws *ws, int is_init, int ic, int val)
   }
 }
 /*}}}*/
-/*{{{ try_group_allocate() */
-static int
-try_group_allocate(int gi, struct layout *lay, struct ws *ws)
+static int try_group_allocate(int gi, struct layout *lay, struct ws *ws)/*{{{*/
 {
   /* Return 0 if the solution is broken,
    *        1 if we didn't allocate anything,
@@ -481,11 +395,7 @@ try_group_allocate(int gi, struct layout *lay, struct ws *ws)
 
 }
 /*}}}*/
-/*{{{ try_subsets() */
-static int
-try_subsets(int gi,
-    struct layout *lay,
-    struct ws *ws)
+static int try_subsets(int gi, struct layout *lay, struct ws *ws)/*{{{*/
 {
   /* Couldn't do any allocates in the group.
    * So try the more sophisticated analysis:
@@ -562,13 +472,9 @@ try_subsets(int gi,
   free(flags);
   return did_anything ? 1 : 0;
 }
-
 /*}}}*/
-/*{{{ try_near_stragglers() */
-static int
-try_near_stragglers(int gi,
-    struct layout *lay,
-    struct ws *ws)
+
+static int try_near_stragglers(int gi, struct layout *lay, struct ws *ws)/*{{{*/
 {
   /* 
    * Deal with this case: suppose the symbols 2,3,5,6 are unallocated within
@@ -655,13 +561,8 @@ examine_next_symbol:
   free(poss_map);
   return did_anything ? 1 : 0;
 }
-
 /*}}}*/
-/*{{{ try_remote_stragglers() */
-static int
-try_remote_stragglers(int gi,
-    struct layout *lay,
-    struct ws *ws)
+static int try_remote_stragglers(int gi, struct layout *lay, struct ws *ws)/*{{{*/
 {
   /* 
    * Deal with this case: suppose the symbols 2,3,5 are unallocated within
@@ -738,82 +639,8 @@ try_remote_stragglers(int gi,
 
   return did_anything ? 1 : 0;
 }
-
 /*}}}*/
-#if 0
-/*{{{ do_group() */
-static int
-do_group(int gi, struct layout *lay, struct ws *ws)
-{
-  /* Return 0 if something went wrong, 1 if it was OK.  */
-
-  int status;
-
-  /* Don't continue if it's a row or column and we don't want that */
-  if ((ws->options & OPT_NO_LINES) && (lay->is_block[gi] == 0)) return 1;
-
-  /* Group will get enqueued when the final symbol is allocated; we can exit
-   * right away when it next gets scanned. */
-  if (ws->todo[gi] == 0) return 1;
-
-  status = try_group_allocate(gi, lay, ws);
-  if (!status) return status;
-
-  if ((status == 1) && !(ws->options & OPT_NO_SUBSETS)) {
-    status = try_subsets(gi, lay, ws);
-  }
-
-  if ((status == 1) && !(ws->options & OPT_NO_REMOTE)) {
-    status = try_remote_stragglers(gi, lay, ws);
-  }
- 
-  if ((status == 1) && !(ws->options & OPT_NO_NEAR)) {
-    status = try_near_stragglers(gi, lay, ws);
-  }
-  
-  /* Add new infererence techniques here, if status==1 */
-  return 1; /* Success */
-}
-/*}}}*/
-/*{{{ do_uniques() */
-static int
-do_uniques(struct layout *lay, struct ws *ws)
-{
-  int ic;
-  int NC;
-  int nb;
-  NC = lay->nc;
-  for (ic=0; ic<NC; ic++) {
-    if (ws->state[ic] < 0) {
-      nb = count_bits(ws->poss[ic]);
-      if (nb == 0) {
-        if (ws->options & OPT_VERBOSE) {
-          fprintf(stderr, "Cell <%s> has no options left\n", lay->cells[ic].name);
-        }
-        return 0;
-      } else if (nb == 1) {
-        int sym = decode(ws->poss[ic]);
-        if (ws->options & OPT_VERBOSE) {
-          fprintf(stderr, "Allocate <%c> to <%s> (only option)\n",
-              lay->symbols[sym], lay->cells[ic].name);
-        }
-        --ws->n_todo;
-        allocate(lay, ws, 0, ic, sym);
-        if (ws->options & OPT_HINT) {
-          free_ws(ws);
-          free_layout(lay);
-          exit(0);
-        }
-      }
-    }
-  }
-  return 1;
-}
-/*}}}*/
-#endif
-/*{{{ try_onlyopt() */
-static int
-try_onlyopt(int ic, struct layout *lay, struct ws *ws)
+static int try_onlyopt(int ic, struct layout *lay, struct ws *ws)/*{{{*/
 {
   int NC;
   int nb;
@@ -844,12 +671,8 @@ try_onlyopt(int ic, struct layout *lay, struct ws *ws)
   return 0;
 }
 /*}}}*/
-/*{{{ select_minimal_cell() */
-static int
-select_minimal_cell(struct layout *lay,
-                    int *state,
-                    int *poss,
-                    int in_overlap)
+
+static int select_minimal_cell(struct layout *lay, int *state, int *poss, int in_overlap)/*{{{*/
 {
   int ic;
   int minbits;
@@ -870,9 +693,7 @@ select_minimal_cell(struct layout *lay,
   return ic;
 }
 /*}}}*/
-/*{{{ speculate() */
-static int
-speculate(struct layout *lay, struct ws *ws_in)
+static int speculate(struct layout *lay, struct ws *ws_in)/*{{{*/
 {
   /* Called when all else fails and we have to guess a cell but be able to back
    * out the guess if it goes wrong. */
@@ -929,6 +750,7 @@ speculate(struct layout *lay, struct ws *ws_in)
   return total_n_sol;
 }
 /*}}}*/
+
 static int inner_infer(struct layout *lay, struct ws *ws)/*{{{*/
 {
   int NC, NG, NS;
@@ -1042,7 +864,7 @@ int infer(struct layout *lay, int *state, int *order, int options)/*{{{*/
 
     next_block_push = next_group_push;
     next_line_push  = next_group_push;
-    
+
     if (!(options & OPT_NO_LINES)) {
       struct queue *our_q = mk_queue(try_group_allocate, next_run, next_line_push);
       next_run = next_line_push = our_q;
@@ -1078,4 +900,5 @@ int infer(struct layout *lay, int *state, int *order, int options)/*{{{*/
   
 }
 /*}}}*/
+
 /* ============================================================================ */
