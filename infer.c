@@ -857,11 +857,15 @@ int infer(struct layout *lay, int *state, int *order, int options)/*{{{*/
       struct queue *our_q = mk_queue(try_subsets, next_run, next_group_push);
       next_run = next_group_push = our_q;
     }
-    if (!(options & OPT_NO_ONLYOPT)) {
-      struct queue *our_q = mk_queue(try_onlyopt, next_run, next_cell_push);
-      next_run = next_cell_push = our_q;
+    if (!(options & OPT_ONLYOPT_FIRST)) {
+      if (!(options & OPT_NO_ONLYOPT)) {
+        struct queue *our_q = mk_queue(try_onlyopt, next_run, next_cell_push);
+        next_run = next_cell_push = our_q;
+      }
     }
 
+    /* TODO : eventually, the earlier queues may be split into separate block
+     * and line variants. */
     next_block_push = next_group_push;
     next_line_push  = next_group_push;
 
@@ -873,6 +877,14 @@ int infer(struct layout *lay, int *state, int *order, int options)/*{{{*/
       struct queue *our_q = mk_queue(try_group_allocate, next_run, next_block_push);
       next_run = next_block_push = our_q;
     }
+
+    if (options & OPT_ONLYOPT_FIRST) {
+      if (!(options & OPT_NO_ONLYOPT)) {
+        struct queue *our_q = mk_queue(try_onlyopt, next_run, next_cell_push);
+        next_run = next_cell_push = our_q;
+      }
+    }
+
     ws->base_q = next_run;
     ws->base_block_q = next_block_push;
     ws->base_line_q = next_line_push;
