@@ -15,19 +15,25 @@ struct link {/*{{{*/
 };
 /*}}}*/
 
+struct score {
+  double foo;
+};
+
+
 /* Returns -1 if an error has been detected,
  * 0 if no work got done,
  * 1 if work was done. */
-typedef int (*WORKER)(int, struct layout *, struct ws *);
+typedef int (*WORKER)(int, struct layout *, struct ws *, struct score *score);
   
 struct queue {/*{{{*/
   struct link links; /* .index ignored */
   struct queue *next_to_run;
   struct queue *next_to_push;
+  char *name;
   WORKER worker;
 };
 /*}}}*/
-static struct queue *mk_queue(WORKER worker, struct queue *next_to_run, struct queue *next_to_push)/*{{{*/
+static struct queue *mk_queue(WORKER worker, struct queue *next_to_run, struct queue *next_to_push, char *name)/*{{{*/
 {
   struct queue *x;
   x = new(struct queue);
@@ -35,6 +41,7 @@ static struct queue *mk_queue(WORKER worker, struct queue *next_to_run, struct q
   x->worker = worker;
   x->next_to_run = next_to_run;
   x->next_to_push = next_to_push;
+  x->name = name;
   return x;
 }
 /*}}}*/
@@ -106,6 +113,7 @@ struct ws {/*{{{*/
   int solvepos;
   int spec_depth;
   int n_todo;
+  int score;
 
   /* Pointers/values passed in at the outer level. */
   int options;
@@ -137,6 +145,7 @@ static struct ws *make_ws(int nc, int ng, int ns)/*{{{*/
   ws->todo = new_array(int, ng);
   ws->poss = new_array(int, nc);
   ws->n_todo = 0;
+  ws->score = 0;
   for (i=0; i<ng; i++) ws->todo[i] = fill;
   for (i=0; i<nc; i++) ws->poss[i] = fill;
 
@@ -209,9 +218,6 @@ static struct ws *clone_ws(const struct ws *src)/*{{{*/
   ws->group_links = src->group_links;
   ws->cell_links = src->cell_links;
   
-#if 0
-  ws->scan_q = mk_queue(src->ng);
-#endif
   return ws;
 }
 /*}}}*/
@@ -342,11 +348,11 @@ static void allocate(struct layout *lay, struct ws *ws, int is_init, int ic, int
   }
 }
 /*}}}*/
-static int try_group_allocate(int gi, struct layout *lay, struct ws *ws)/*{{{*/
+static int try_group_allocate(int gi, struct layout *lay, struct ws *ws, struct score *score)/*{{{*/
 {
-  /* Return 0 if the solution is broken,
-   *        1 if we didn't allocate anything,
-   *        2 if we did. */
+  /* Return -1 if the solution is broken,
+   *        0 if we didn't allocate anything,
+   *        1 if we did. */
   int NS;
   short *base;
   int sym, mask;
@@ -375,18 +381,22 @@ static int try_group_allocate(int gi, struct layout *lay, struct ws *ws)/*{{{*/
         }
         return -1;
       } else if (count == 1) {
-        if (ws->options & OPT_VERBOSE) {
-          fprintf(stderr, "Allocate <%c> to <%s> (allocate in <%s>)\n",
-              lay->symbols[sym], lay->cells[xic].name, lay->group_names[gi]);
+        if (score) {
+          score->foo += 1.0 / (double) count_bits(ws->todo[gi]);
+        } else {
+          if (ws->options & OPT_VERBOSE) {
+            fprintf(stderr, "Allocate <%c> to <%s> (allocate in <%s>)\n",
+                lay->symbols[sym], lay->cells[xic].name, lay->group_names[gi]);
+          }
+          --ws->n_todo;
+          allocate(lay, ws, 0, xic, sym);
+          if (ws->options & OPT_HINT) {
+            free_ws(ws);
+            free_layout(lay);
+            exit(0);
+          }
         }
-        --ws->n_todo;
-        allocate(lay, ws, 0, xic, sym);
         found_any = 1;
-        if (ws->options & OPT_HINT) {
-          free_ws(ws);
-          free_layout(lay);
-          exit(0);
-        }
       }
     }
   }
@@ -395,7 +405,7 @@ static int try_group_allocate(int gi, struct layout *lay, struct ws *ws)/*{{{*/
 
 }
 /*}}}*/
-static int try_subsets(int gi, struct layout *lay, struct ws *ws)/*{{{*/
+static int try_subsets(int gi, struct layout *lay, struct ws *ws, struct score *score)/*{{{*/
 {
   /* Couldn't do any allocates in the group.
    * So try the more sophisticated analysis:
@@ -451,15 +461,18 @@ static int try_subsets(int gi, struct layout *lay, struct ws *ws)/*{{{*/
             int ic = base[m];
             if (!flags[ic]) { /* cell not in the original group. */
               if (ws->poss[ic] & mask) {
-                if (ws->options & OPT_VERBOSE) {
-                  fprintf(stderr, "Removing <%c> from <%s> (in <%s> due to placement in <%s>)\n",
-                      lay->symbols[sym], lay->cells[ic].name,
-                      lay->group_names[j], lay->group_names[gi]);
+                if (score) {
+                } else {
+                  if (ws->options & OPT_VERBOSE) {
+                    fprintf(stderr, "Removing <%c> from <%s> (in <%s> due to placement in <%s>)\n",
+                        lay->symbols[sym], lay->cells[ic].name,
+                        lay->group_names[j], lay->group_names[gi]);
+                  }
+                  ws->poss[ic] &= ~mask;
+                  requeue_cell(ic, lay, ws);
+                  requeue_groups(lay, ws, ic);
+                  found_something = 1;
                 }
-                ws->poss[ic] &= ~mask;
-                requeue_cell(ic, lay, ws);
-                requeue_groups(lay, ws, ic);
-                found_something = 1;
                 did_anything = 1;
               }
             }
@@ -474,7 +487,7 @@ static int try_subsets(int gi, struct layout *lay, struct ws *ws)/*{{{*/
 }
 /*}}}*/
 
-static int try_near_stragglers(int gi, struct layout *lay, struct ws *ws)/*{{{*/
+static int try_near_stragglers(int gi, struct layout *lay, struct ws *ws, struct score *score)/*{{{*/
 {
   /* 
    * Deal with this case: suppose the symbols 2,3,5,6 are unallocated within
@@ -538,16 +551,19 @@ static int try_near_stragglers(int gi, struct layout *lay, struct ws *ws)/*{{{*/
         if (poss_map[sym] & (1<<cell)) {
           int ci = base[cell];
           if (ws->poss[ci] != intersect[sym]) {
-            if (ws->options & OPT_VERBOSE) {
-              fprintf(stderr, "Removing <");
-              show_symbols_in_set(NS, lay->symbols, ws->poss[ci] & ~intersect[sym]);
-              fprintf(stderr, "> from <%s>, must be one of <", lay->cells[ci].name);
-              show_symbols_in_set(NS, lay->symbols, intersect[sym]);
-              fprintf(stderr, "> in <%s>\n", lay->group_names[gi]);
+            if (score) {
+            } else {
+              if (ws->options & OPT_VERBOSE) {
+                fprintf(stderr, "Removing <");
+                show_symbols_in_set(NS, lay->symbols, ws->poss[ci] & ~intersect[sym]);
+                fprintf(stderr, "> from <%s>, must be one of <", lay->cells[ci].name);
+                show_symbols_in_set(NS, lay->symbols, intersect[sym]);
+                fprintf(stderr, "> in <%s>\n", lay->group_names[gi]);
+              }
+              ws->poss[ci] = intersect[sym];
+              requeue_cell(ci, lay, ws);
+              requeue_groups(lay, ws, ci);
             }
-            ws->poss[ci] = intersect[sym];
-            requeue_cell(ci, lay, ws);
-            requeue_groups(lay, ws, ci);
             did_anything = 1;
           }
         }
@@ -562,7 +578,7 @@ examine_next_symbol:
   return did_anything ? 1 : 0;
 }
 /*}}}*/
-static int try_remote_stragglers(int gi, struct layout *lay, struct ws *ws)/*{{{*/
+static int try_remote_stragglers(int gi, struct layout *lay, struct ws *ws, struct score *score)/*{{{*/
 {
   /* 
    * Deal with this case: suppose the symbols 2,3,5 are unallocated within
@@ -605,32 +621,36 @@ static int try_remote_stragglers(int gi, struct layout *lay, struct ws *ws)/*{{{
         for (j=0; j<NS; j++) {
           cj = base[j];
           if ((ws->poss[cj] != ws->poss[ci]) && (ws->poss[cj] & ws->poss[ci])) {
-            did_anything = did_anything_this_iter = 1;
-            if (ws->options & OPT_VERBOSE) {
-              int k, fk;
-              fprintf(stderr, "Removing <");
-              show_symbols_in_set(NS, lay->symbols, ws->poss[cj] & ws->poss[ci]);
-              fprintf(stderr, "> from <%s:", lay->cells[cj].name);
-              show_symbols_in_set(NS, lay->symbols, ws->poss[cj]);
-              fprintf(stderr, ">, because <");
-              show_symbols_in_set(NS, lay->symbols, ws->poss[ci]);
-              fprintf(stderr, "> must be in <");
-              fk = 1;
-              for (k=0; k<NS; k++) {
-                int ck = base[k];
-                if (ws->poss[ck] == ws->poss[ci]) {
-                  if (!fk) {
-                    fprintf(stderr, ",");
+            did_anything = 1;
+            if (score) {
+            } else {
+              did_anything_this_iter = 1;
+              if (ws->options & OPT_VERBOSE) {
+                int k, fk;
+                fprintf(stderr, "Removing <");
+                show_symbols_in_set(NS, lay->symbols, ws->poss[cj] & ws->poss[ci]);
+                fprintf(stderr, "> from <%s:", lay->cells[cj].name);
+                show_symbols_in_set(NS, lay->symbols, ws->poss[cj]);
+                fprintf(stderr, ">, because <");
+                show_symbols_in_set(NS, lay->symbols, ws->poss[ci]);
+                fprintf(stderr, "> must be in <");
+                fk = 1;
+                for (k=0; k<NS; k++) {
+                  int ck = base[k];
+                  if (ws->poss[ck] == ws->poss[ci]) {
+                    if (!fk) {
+                      fprintf(stderr, ",");
+                    }
+                    fk = 0;
+                    fprintf(stderr, "%s", lay->cells[ck].name);
                   }
-                  fk = 0;
-                  fprintf(stderr, "%s", lay->cells[ck].name);
                 }
+                fprintf(stderr, "> in <%s>\n", lay->group_names[gi]);
               }
-              fprintf(stderr, "> in <%s>\n", lay->group_names[gi]);
+              ws->poss[cj] &= ~ws->poss[ci];
+              requeue_cell(cj, lay, ws);
+              requeue_groups(lay, ws, cj);
             }
-            ws->poss[cj] &= ~ws->poss[ci];
-            requeue_cell(cj, lay, ws);
-            requeue_groups(lay, ws, cj);
           }
         }
       }
@@ -640,7 +660,7 @@ static int try_remote_stragglers(int gi, struct layout *lay, struct ws *ws)/*{{{
   return did_anything ? 1 : 0;
 }
 /*}}}*/
-static int try_onlyopt(int ic, struct layout *lay, struct ws *ws)/*{{{*/
+static int try_onlyopt(int ic, struct layout *lay, struct ws *ws, struct score *score)/*{{{*/
 {
   int NC;
   int nb;
@@ -653,17 +673,20 @@ static int try_onlyopt(int ic, struct layout *lay, struct ws *ws)/*{{{*/
       }
       return -1;
     } else if (nb == 1) {
-      int sym = decode(ws->poss[ic]);
-      if (ws->options & OPT_VERBOSE) {
-        fprintf(stderr, "Allocate <%c> to <%s> (only option)\n",
-            lay->symbols[sym], lay->cells[ic].name);
-      }
-      --ws->n_todo;
-      allocate(lay, ws, 0, ic, sym);
-      if (ws->options & OPT_HINT) {
-        free_ws(ws);
-        free_layout(lay);
-        exit(0);
+      if (score) {
+      } else {
+        int sym = decode(ws->poss[ic]);
+        if (ws->options & OPT_VERBOSE) {
+          fprintf(stderr, "Allocate <%c> to <%s> (only option)\n",
+              lay->symbols[sym], lay->cells[ic].name);
+        }
+        --ws->n_todo;
+        allocate(lay, ws, 0, ic, sym);
+        if (ws->options & OPT_HINT) {
+          free_ws(ws);
+          free_layout(lay);
+          exit(0);
+        }
       }
       return 1;
     }
@@ -751,11 +774,73 @@ static int speculate(struct layout *lay, struct ws *ws_in)/*{{{*/
 }
 /*}}}*/
 
+/* ============================================================================ */
+
+static void do_scoring(struct layout *lay, struct ws *ws)/*{{{*/
+{
+  /* Determine an increment for the score based on how 'hard' the puzzle is to
+   * advance at this stage. */
+
+  int n_open_groups, n_open_cells;
+  int n_live_resources;
+  
+  int n_live_alloc, n_live_subsets, n_live_onlyopt, n_live_remote, n_live_near;
+
+  int i, nc, ng;
+  struct score score;
+  int status, status0;
+
+  n_live_alloc = 0;
+  n_live_subsets = 0;
+  n_live_onlyopt = 0;
+  n_live_remote = 0;
+  n_live_near = 0;
+  n_live_resources = 0;
+
+  nc = lay->nc;
+  ng = lay->ng;
+  n_open_cells = 0;
+  n_open_groups = 0;
+
+  score.foo = 0.0;
+  
+  for (i=0; i<nc; i++) {
+    if (ws->state[i] < 0) {
+      ++n_open_cells;
+      status = try_onlyopt(i, lay, ws, &score);
+      if (status) ++n_live_onlyopt, ++n_live_resources;
+    }
+  }
+  for (i=0; i<ng; i++) {
+    if (ws->todo[i] > 0) {
+      status = 0;
+      ++n_open_groups;
+      status |= status0 = try_group_allocate(i, lay, ws, &score);
+      if (status0) ++n_live_alloc;
+      status |= status0 = try_subsets(i, lay, ws, &score);
+      if (status0) ++n_live_subsets;
+      status |= status0 = try_remote_stragglers(i, lay, ws, &score);
+      if (status0) ++n_live_remote;
+      status |= status0 = try_near_stragglers(i, lay, ws, &score);
+      if (status0) ++n_live_near;
+      if (status) ++n_live_resources;
+    }
+  }
+
+  fprintf(stderr, "  OPEN_CELLS=%d, OPEN_GROUPS=%d  LIVE_RESOURCES=%d (a=%d,s=%d,o=%d,r=%d,n=%d)\n",
+      n_open_cells, n_open_groups, n_live_resources,
+      n_live_alloc, n_live_subsets, n_live_onlyopt, n_live_remote, n_live_near);
+}
+/*}}}*/
+
+/* ============================================================================ */
+
 static int inner_infer(struct layout *lay, struct ws *ws)/*{{{*/
 {
   int NC, NG, NS;
   int result;
   struct queue *q;
+  int do_rescore;
 
   NC = lay->nc;
   NG = lay->ng;
@@ -763,12 +848,21 @@ static int inner_infer(struct layout *lay, struct ws *ws)/*{{{*/
 
   q = ws->base_q;
   result = 0;
+  do_rescore = 1;
+
   while (q) { /* i.e. we still have a queue left to look at */
     struct link *lk;
+
+    if ((ws->options & OPT_SCORE) && do_rescore) {
+      /* Only score after some progress has been made. */
+      do_scoring(lay, ws);
+      do_rescore = 0;
+    }
+
     lk = dequeue(q);
     if (lk) {
       int status;
-      status = (q->worker)(lk->index, lay, ws);
+      status = (q->worker)(lk->index, lay, ws, NULL);
       switch (status) {
         case -1:
           goto get_out;
@@ -784,6 +878,7 @@ static int inner_infer(struct layout *lay, struct ws *ws)/*{{{*/
           /* If the worker made progress, start scanning from the easiest
            * queue again. */
           q = ws->base_q;
+          do_rescore = 1;
           break;
         default:
           fprintf(stderr, "Oh dear, result=%d\n", result);
@@ -821,7 +916,7 @@ get_out:
   
 }
 /*}}}*/
-int infer(struct layout *lay, int *state, int *order, int options)/*{{{*/
+int infer(struct layout *lay, int *state, int *order, int *score, int options)/*{{{*/
 {
   int nc, ng, ns;
   struct ws *ws;
@@ -831,6 +926,10 @@ int infer(struct layout *lay, int *state, int *order, int options)/*{{{*/
   nc = lay->nc;
   ng = lay->ng;
   ns = lay->ns;
+
+  if (score) {
+    options |= OPT_SCORE;
+  }
 
   ws = make_ws(nc, ng, ns);
   ws->solvepos = 0;
@@ -846,20 +945,20 @@ int infer(struct layout *lay, int *state, int *order, int options)/*{{{*/
     next_group_push = NULL;
 
     if (!(options & OPT_NO_NEAR)) {
-      struct queue *our_q = mk_queue(try_near_stragglers, next_run, next_group_push);
+      struct queue *our_q = mk_queue(try_near_stragglers, next_run, next_group_push, "Near");
       next_run = next_group_push = our_q;
     }
     if (!(options & OPT_NO_REMOTE)) {
-      struct queue *our_q = mk_queue(try_remote_stragglers, next_run, next_group_push);
+      struct queue *our_q = mk_queue(try_remote_stragglers, next_run, next_group_push, "Remote");
       next_run = next_group_push = our_q;
     }
     if (!(options & OPT_NO_SUBSETS)) {
-      struct queue *our_q = mk_queue(try_subsets, next_run, next_group_push);
+      struct queue *our_q = mk_queue(try_subsets, next_run, next_group_push, "Subsets");
       next_run = next_group_push = our_q;
     }
     if (!(options & OPT_ONLYOPT_FIRST)) {
       if (!(options & OPT_NO_ONLYOPT)) {
-        struct queue *our_q = mk_queue(try_onlyopt, next_run, next_cell_push);
+        struct queue *our_q = mk_queue(try_onlyopt, next_run, next_cell_push, "Onlyopt");
         next_run = next_cell_push = our_q;
       }
     }
@@ -870,17 +969,17 @@ int infer(struct layout *lay, int *state, int *order, int options)/*{{{*/
     next_line_push  = next_group_push;
 
     if (!(options & OPT_NO_LINES)) {
-      struct queue *our_q = mk_queue(try_group_allocate, next_run, next_line_push);
+      struct queue *our_q = mk_queue(try_group_allocate, next_run, next_line_push, "Lines");
       next_run = next_line_push = our_q;
     }
     if (1) { /* allocate in blocks. */
-      struct queue *our_q = mk_queue(try_group_allocate, next_run, next_block_push);
+      struct queue *our_q = mk_queue(try_group_allocate, next_run, next_block_push, "Blocks");
       next_run = next_block_push = our_q;
     }
 
     if (options & OPT_ONLYOPT_FIRST) {
       if (!(options & OPT_NO_ONLYOPT)) {
-        struct queue *our_q = mk_queue(try_onlyopt, next_run, next_cell_push);
+        struct queue *our_q = mk_queue(try_onlyopt, next_run, next_cell_push, "Onlyopt");
         next_run = next_cell_push = our_q;
       }
     }

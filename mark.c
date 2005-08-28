@@ -78,6 +78,7 @@ void mark_cells(int grey_cells, int options)/*{{{*/
   int *order;
   int i, j;
   struct layout *lay;
+  int score;
 
   read_grid(&lay, &state, options);
 
@@ -88,7 +89,7 @@ void mark_cells(int grey_cells, int options)/*{{{*/
     memset(order, 0, lay->nc * sizeof(int));
     
     setup_terminals(lay);
-    infer(lay, copy, order, OPT_SPECULATE);
+    infer(lay, copy, order, &score, OPT_SPECULATE | OPT_VERBOSE);
     weed_terminals(lay, order);
 
     shade = new_array(struct intpair, lay->nc);

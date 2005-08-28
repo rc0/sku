@@ -22,7 +22,7 @@ static int inner_reduce_check_solvable(struct layout *lay, int *state, int optio
   copy = new_array(int, lay->nc);
   memcpy(copy, state, lay->nc * sizeof(int));
   setup_terminals(lay);
-  n_solutions = infer(lay, copy, NULL, OPT_STOP_ON_2 | (options & OPT_SPECULATE));
+  n_solutions = infer(lay, copy, NULL, NULL, OPT_STOP_ON_2 | (options & OPT_SPECULATE));
   if (n_solutions == 1) {
     result = 1;
   } else {
@@ -111,10 +111,10 @@ int inner_reduce(struct layout *lay, int *state, int options)/*{{{*/
 
         if (options & OPT_SPECULATE) {
           setup_terminals(lay);
-          n_sol = infer(lay, copy, NULL, OPT_SPECULATE);
+          n_sol = infer(lay, copy, NULL, NULL, OPT_SPECULATE);
         } else {
           setup_terminals(lay);
-          n_sol = infer(lay, copy, NULL, (options & OPT_MAKE_EASIER) | OPT_STOP_ON_2);
+          n_sol = infer(lay, copy, NULL, NULL, (options & OPT_MAKE_EASIER) | OPT_STOP_ON_2);
         }
         tally--;
         if (n_sol == 1) {

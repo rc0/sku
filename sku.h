@@ -91,6 +91,7 @@ struct super_layout {
 #define OPT_ALLOW_TRIVIAL (1<<9)
 #define OPT_SHOW_ALL (1<<10)
 #define OPT_ONLYOPT_FIRST (1<<11)
+#define OPT_SCORE (1<<12)
 
 #define OPT_NO_LINES   (1<<16)
 #define OPT_NO_SUBSETS (1<<17)
@@ -110,7 +111,7 @@ extern void show_symbols_in_set(int ns, const char *symbols, int bitmap);
 extern void setup_terminals(struct layout *lay);
 
 /* In infer.c */
-int infer(struct layout *lay, int *state, int *order, int options);
+int infer(struct layout *lay, int *state, int *order, int *score, int options);
 
 /* In superlayout.c */
 extern void superlayout_5(struct super_layout *superlay);
