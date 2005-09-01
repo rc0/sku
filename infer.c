@@ -487,7 +487,7 @@ static int try_subsets(int gi, struct layout *lay, struct ws *ws, struct score *
 }
 /*}}}*/
 
-static int try_near_stragglers(int gi, struct layout *lay, struct ws *ws, struct score *score)/*{{{*/
+static int try_split_internal(int gi, struct layout *lay, struct ws *ws, struct score *score)/*{{{*/
 {
   /* 
    * Deal with this case: suppose the symbols 2,3,5,6 are unallocated within
@@ -578,7 +578,7 @@ examine_next_symbol:
   return did_anything ? 1 : 0;
 }
 /*}}}*/
-static int try_remote_stragglers(int gi, struct layout *lay, struct ws *ws, struct score *score)/*{{{*/
+static int try_split_external(int gi, struct layout *lay, struct ws *ws, struct score *score)/*{{{*/
 {
   /* 
    * Deal with this case: suppose the symbols 2,3,5 are unallocated within
@@ -838,12 +838,12 @@ static void do_scoring(struct layout *lay, struct ws *ws)/*{{{*/
         ++n_live_subsets;
         this_score += 1.0 / 5.0;
       }
-      status |= status0 = try_remote_stragglers(i, lay, ws, &score);
+      status |= status0 = try_split_external(i, lay, ws, &score);
       if (status0) {
         ++n_live_remote;
         this_score += 1.0 / 10.0;
       }
-      status |= status0 = try_near_stragglers(i, lay, ws, &score);
+      status |= status0 = try_split_internal(i, lay, ws, &score);
       if (status0) {
         ++n_live_near;
         this_score += 1.0 / 10.0;
@@ -977,12 +977,12 @@ int infer(struct layout *lay, int *state, int *order, int *score, int options)/*
     next_cell_push = NULL;
     next_group_push = NULL;
 
-    if (!(options & OPT_NO_NEAR)) {
-      struct queue *our_q = mk_queue(try_near_stragglers, next_run, next_group_push, "Near");
+    if (!(options & OPT_NO_SPLIT_INT)) {
+      struct queue *our_q = mk_queue(try_split_internal, next_run, next_group_push, "Near");
       next_run = next_group_push = our_q;
     }
-    if (!(options & OPT_NO_REMOTE)) {
-      struct queue *our_q = mk_queue(try_remote_stragglers, next_run, next_group_push, "Remote");
+    if (!(options & OPT_NO_SPLIT_EXT)) {
+      struct queue *our_q = mk_queue(try_split_external, next_run, next_group_push, "Remote");
       next_run = next_group_push = our_q;
     }
     if (!(options & OPT_NO_SUBSETS)) {

@@ -35,10 +35,10 @@ static void usage(void)
       "\n"
       "-r            : reduce to minimum no. of givens\n"
       "  -E          : generate an 'easy' puzzle (only needs allocate within blocks)\n"
+      "  -Ee         : don't look for splits (exterior removals)\n"
+      "  -Ei         : don't look for splits (interior removals)\n"
       "  -El         : don't do allocation along lines (only within blocks)\n"
-      "  -En         : don't look for near stragglers\n"
       "  -Eo         : don't look for squares with only one option left\n"
-      "  -Er         : don't look for remote stragglers\n"
       "  -Es         : don't do subset analysis\n"
       "  -m<number>  : try <number> times to find a puzzle with a smallest number of givens\n"
       "  -s          : allow solutions that require speculation to solve\n"
@@ -61,18 +61,18 @@ static void apply_level(const char *level, int *options, int *reduce_req_n)/*{{{
   int lo, hi;
   const int tab_a[6] = {
     OPT_MAKE_EASIER,
-    OPT_NO_SUBSETS | OPT_NO_ONLYOPT | OPT_NO_REMOTE | OPT_NO_NEAR,
-    OPT_NO_ONLYOPT | OPT_NO_REMOTE | OPT_NO_NEAR,
-    OPT_NO_REMOTE | OPT_NO_NEAR,
-    OPT_NO_NEAR,
+    OPT_NO_SUBSETS | OPT_NO_ONLYOPT | OPT_NO_SPLIT_EXT | OPT_NO_SPLIT_INT,
+    OPT_NO_ONLYOPT | OPT_NO_SPLIT_EXT | OPT_NO_SPLIT_INT,
+    OPT_NO_SPLIT_EXT | OPT_NO_SPLIT_INT,
+    OPT_NO_SPLIT_INT,
     0
   };
   const int tab_b[6] = {
     OPT_MAKE_EASIER,
-    OPT_NO_LINES | OPT_NO_SUBSETS | OPT_NO_REMOTE | OPT_NO_NEAR,
-    OPT_NO_SUBSETS | OPT_NO_REMOTE | OPT_NO_NEAR,
-    OPT_NO_REMOTE | OPT_NO_NEAR,
-    OPT_NO_NEAR,
+    OPT_NO_LINES | OPT_NO_SUBSETS | OPT_NO_SPLIT_EXT | OPT_NO_SPLIT_INT,
+    OPT_NO_SUBSETS | OPT_NO_SPLIT_EXT | OPT_NO_SPLIT_INT,
+    OPT_NO_SPLIT_EXT | OPT_NO_SPLIT_INT,
+    OPT_NO_SPLIT_INT,
     0
   };
 
@@ -148,10 +148,10 @@ int main (int argc, char **argv)/*{{{*/
         const char *p = 2 + *argv;
         while (*p) {
           switch (*p) {
+            case 'e': options |= OPT_NO_SPLIT_EXT;  break;
+            case 'i': options |= OPT_NO_SPLIT_INT;    break;
             case 'l': options |= OPT_NO_LINES;   break;
-            case 'n': options |= OPT_NO_NEAR;    break;
             case 'o': options |= OPT_NO_ONLYOPT; break;
-            case 'r': options |= OPT_NO_REMOTE;  break;
             case 's': options |= OPT_NO_SUBSETS; break;
             default: fprintf(stderr, "Can't use %c with -E\n", *p);
               break;
@@ -189,10 +189,10 @@ int main (int argc, char **argv)/*{{{*/
         const char *p = 2 + *argv;
         while (*p) {
           switch (*p) {
+            case 'e': reduce_req_n |= OPT_NO_SPLIT_EXT;  break;
+            case 'i': reduce_req_n |= OPT_NO_SPLIT_INT;    break;
             case 'l': reduce_req_n |= OPT_NO_LINES;   break;
-            case 'n': reduce_req_n |= OPT_NO_NEAR;    break;
             case 'o': reduce_req_n |= OPT_NO_ONLYOPT; break;
-            case 'r': reduce_req_n |= OPT_NO_REMOTE;  break;
             case 's': reduce_req_n |= OPT_NO_SUBSETS; break;
             default: fprintf(stderr, "Can't use %c with -R\n", *p);
               break;

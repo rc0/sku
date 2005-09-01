@@ -93,13 +93,13 @@ struct super_layout {
 #define OPT_ONLYOPT_FIRST (1<<11)
 #define OPT_SCORE (1<<12)
 
-#define OPT_NO_LINES   (1<<16)
-#define OPT_NO_SUBSETS (1<<17)
-#define OPT_NO_ONLYOPT (1<<18)
-#define OPT_NO_NEAR    (1<<19)
-#define OPT_NO_REMOTE  (1<<20)
+#define OPT_NO_LINES     (1<<16)
+#define OPT_NO_SUBSETS   (1<<17)
+#define OPT_NO_ONLYOPT   (1<<18)
+#define OPT_NO_SPLIT_INT (1<<19)
+#define OPT_NO_SPLIT_EXT (1<<20)
 
-#define OPT_MAKE_EASIER (OPT_NO_LINES | OPT_NO_SUBSETS | OPT_NO_ONLYOPT | OPT_NO_NEAR | OPT_NO_REMOTE)
+#define OPT_MAKE_EASIER (OPT_NO_LINES | OPT_NO_SUBSETS | OPT_NO_ONLYOPT | OPT_NO_SPLIT_INT | OPT_NO_SPLIT_EXT)
 
 /* ============================================================================ */
 
