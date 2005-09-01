@@ -113,7 +113,7 @@ struct ws {/*{{{*/
   int solvepos;
   int spec_depth;
   int n_todo;
-  int score;
+  double score;
 
   /* Pointers/values passed in at the outer level. */
   int options;
@@ -145,7 +145,7 @@ static struct ws *make_ws(int nc, int ng, int ns)/*{{{*/
   ws->todo = new_array(int, ng);
   ws->poss = new_array(int, nc);
   ws->n_todo = 0;
-  ws->score = 0;
+  ws->score = 0.0;
   for (i=0; i<ng; i++) ws->todo[i] = fill;
   for (i=0; i<nc; i++) ws->poss[i] = fill;
 
@@ -206,8 +206,8 @@ static struct ws *clone_ws(const struct ws *src)/*{{{*/
   ws->todo = copy_array(src->ng, src->todo);
   ws->options = src->options;
   ws->order = src->order;
-  /* Not sure about this. */
   ws->state = NULL;
+  ws->score = 0.0;
 
   /* When we need to clone, we know the queues must be empty!  We share this
    * with the outer context(s) since sharing is cheaper. */
@@ -726,6 +726,7 @@ static int speculate(struct layout *lay, struct ws *ws_in)/*{{{*/
   int NS, NC;
   int *scratch, *solution;
   int n_sol, total_n_sol;
+  int n_poss;
 
   ic = select_minimal_cell(lay, ws_in->state, ws_in->poss, 1);
   if (ic < 0) {
@@ -741,6 +742,7 @@ static int speculate(struct layout *lay, struct ws *ws_in)/*{{{*/
   solution = new_array(int, NC);
   start_point = lrand48() % NS;
   total_n_sol = 0;
+  n_poss = count_bits(ws_in->poss[ic]);
   for (i=0; i<NS; i++) {
     int ii = (i + start_point) % NS;
     int mask = 1<<ii;
@@ -755,6 +757,7 @@ static int speculate(struct layout *lay, struct ws *ws_in)/*{{{*/
       if (n_sol > 0) {
         memcpy(solution, scratch, NC * sizeof(int));
         total_n_sol += n_sol;
+        ws_in->score += ws->score * (double) n_poss;
         if (ws_in->options & OPT_FIRST_ONLY) {
           free_cloned_ws(lay, ws);
           break;
@@ -789,6 +792,7 @@ static void do_scoring(struct layout *lay, struct ws *ws)/*{{{*/
   int i, nc, ng;
   struct score score;
   int status, status0;
+  double this_score;
 
   n_live_alloc = 0;
   n_live_subsets = 0;
@@ -803,12 +807,17 @@ static void do_scoring(struct layout *lay, struct ws *ws)/*{{{*/
   n_open_groups = 0;
 
   score.foo = 0.0;
+
+  this_score = 0.0;
   
   for (i=0; i<nc; i++) {
     if (ws->state[i] < 0) {
       ++n_open_cells;
       status = try_onlyopt(i, lay, ws, &score);
-      if (status) ++n_live_onlyopt, ++n_live_resources;
+      if (status) {
+        ++n_live_onlyopt, ++n_live_resources;
+        this_score += 1.0 / 5.0;
+      }
     }
   }
   for (i=0; i<ng; i++) {
@@ -816,20 +825,44 @@ static void do_scoring(struct layout *lay, struct ws *ws)/*{{{*/
       status = 0;
       ++n_open_groups;
       status |= status0 = try_group_allocate(i, lay, ws, &score);
-      if (status0) ++n_live_alloc;
+      if (status0) {
+        ++n_live_alloc;
+        if (lay->is_block[i]) {
+          this_score += 1.0;
+        } else {
+          this_score += 1.0 / 3.0;
+        }
+      }
       status |= status0 = try_subsets(i, lay, ws, &score);
-      if (status0) ++n_live_subsets;
+      if (status0) {
+        ++n_live_subsets;
+        this_score += 1.0 / 5.0;
+      }
       status |= status0 = try_remote_stragglers(i, lay, ws, &score);
-      if (status0) ++n_live_remote;
+      if (status0) {
+        ++n_live_remote;
+        this_score += 1.0 / 10.0;
+      }
       status |= status0 = try_near_stragglers(i, lay, ws, &score);
-      if (status0) ++n_live_near;
+      if (status0) {
+        ++n_live_near;
+        this_score += 1.0 / 10.0;
+      }
       if (status) ++n_live_resources;
     }
   }
 
-  fprintf(stderr, "  OPEN_CELLS=%d, OPEN_GROUPS=%d  LIVE_RESOURCES=%d (a=%d,s=%d,o=%d,r=%d,n=%d)\n",
-      n_open_cells, n_open_groups, n_live_resources,
-      n_live_alloc, n_live_subsets, n_live_onlyopt, n_live_remote, n_live_near);
+  if (n_live_resources > 0) {
+    this_score = (double)(n_open_cells + n_open_groups) / this_score;
+    ws->score += this_score;
+  }
+
+  if (ws->options & OPT_VERBOSE) {
+    fprintf(stderr, "  OPEN_CELLS=%d, OPEN_GROUPS=%d  LIVE_RESOURCES=%d (a=%d,s=%d,o=%d,r=%d,n=%d), SCORE=%.2f\n",
+        n_open_cells, n_open_groups, n_live_resources,
+        n_live_alloc, n_live_subsets, n_live_onlyopt, n_live_remote, n_live_near,
+        this_score);
+  }
 }
 /*}}}*/
 
@@ -1005,6 +1038,9 @@ int infer(struct layout *lay, int *state, int *order, int *score, int options)/*
 
 
   result = inner_infer(lay, ws);
+  if (score) {
+    *score = (int)(0.5 + ws->score);
+  }
 
   free_ws(ws);
   return result;
