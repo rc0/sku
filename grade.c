@@ -32,6 +32,7 @@ void grade_find_sol_reqs(struct layout *lay, int *state, int options, char *resu
     }
     memcpy(copy, state, lay->nc * sizeof(int));
     setup_terminals(lay);
+    flags |= (options & OPT_MAKE_EASIER);
     n_sol = infer(lay, copy, NULL, NULL, flags);
     if (n_sol == 1) {
       result[i] = 1;

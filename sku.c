@@ -220,6 +220,20 @@ int main (int argc, char **argv)/*{{{*/
     }
   }
 
+  if (options & OPT_NO_LINES) {
+    options |= OPT_IMPLY_NO_LINES;
+  }
+  
+  /* There is pretty much no way to force a puzzle that requires the line rule
+   * to solve it - one of the harder rules will always do instead.  (Unless all
+   * the harder rules are being omitted, that is.) */
+  if ((options & OPT_IMPLY_NO_LINES) != OPT_IMPLY_NO_LINES) {
+    if (reduce_req_n & OPT_NO_LINES) {
+      fprintf(stderr, "WARNING: ignoring -Rl (no -Eeis)\n");
+      reduce_req_n &= ~OPT_NO_LINES;
+    }
+  }
+
   if (options & reduce_req_n) {
     fprintf(stderr, "You cannot exclude methods and require them too!\n");
     exit(1);

@@ -99,6 +99,7 @@ struct super_layout {
 #define OPT_NO_SPLIT_INT (1<<19)
 #define OPT_NO_SPLIT_EXT (1<<20)
 
+#define OPT_IMPLY_NO_LINES (OPT_NO_SUBSETS | OPT_NO_SPLIT_EXT | OPT_NO_SPLIT_INT)
 #define OPT_MAKE_EASIER (OPT_NO_LINES | OPT_NO_SUBSETS | OPT_NO_ONLYOPT | OPT_NO_SPLIT_INT | OPT_NO_SPLIT_EXT)
 
 /* ============================================================================ */
