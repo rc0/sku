@@ -76,6 +76,18 @@ struct super_layout {
 
 /* ============================================================================ */
 
+/* A regular empty cell, waiting to be solved */
+#define CELL_EMPTY -1
+/* The same, but the cell is 'greyed'.  (If the puzzle only requires a subset
+ * of the cells to be solved, they are marked in grey.) */
+#define CELL_MARKED -2
+/* Denotes a cell which we don't try to operate on.  (e.g. To find out which
+ * cells can be totally ignored in trying to solve for just the greyed cells.)
+ */
+#define CELL_BARRED -3
+
+/* ============================================================================ */
+
 #define new(T) (T *) malloc(sizeof(T))
 #define new_array(T, n) (T *) malloc((n) * sizeof(T))
 

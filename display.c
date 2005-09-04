@@ -11,9 +11,11 @@ void display(FILE *out, struct layout *lay, int *state)/*{{{*/
     int row = lay->cells[i].prow;
     int col = lay->cells[i].pcol;
     int idx = row * lay->pcols + col;
-    if (state[i] == -2) {
+    if (state[i] == CELL_BARRED) {
+      grid[idx] = '#';
+    } else if (state[i] == CELL_MARKED) {
       grid[idx] = '*';
-    } else if (state[i] == -1) {
+    } else if (state[i] == CELL_EMPTY) {
       grid[idx] = '.';
     } else {
       grid[idx] = lay->symbols[state[i]];

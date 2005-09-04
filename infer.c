@@ -295,7 +295,9 @@ static void requeue_groups(struct layout *lay, struct ws *ws, int ic)/*{{{*/
 /*}}}*/
 static void requeue_cell(int ci, struct layout *lay, struct ws *ws)/*{{{*/
 {
-  move_to_queue(ws->cell_links + ci, ws->base_cell_q);
+  if (ws->state[ci] != CELL_BARRED) {
+    move_to_queue(ws->cell_links + ci, ws->base_cell_q);
+  }
 }
 /*}}}*/
 
@@ -383,20 +385,23 @@ static int try_group_allocate(int gi, struct layout *lay, struct ws *ws, struct 
       } else if (count == 1) {
         if (score) {
           score->foo += 1.0 / (double) count_bits(ws->todo[gi]);
+          found_any = 1;
         } else {
-          if (ws->options & OPT_VERBOSE) {
-            fprintf(stderr, "Allocate <%c> to <%s> (allocate in <%s>)\n",
-                lay->symbols[sym], lay->cells[xic].name, lay->group_names[gi]);
-          }
-          --ws->n_todo;
-          allocate(lay, ws, 0, xic, sym);
-          if (ws->options & OPT_HINT) {
-            free_ws(ws);
-            free_layout(lay);
-            exit(0);
+          if (ws->state[xic] != CELL_BARRED) {
+            if (ws->options & OPT_VERBOSE) {
+              fprintf(stderr, "Allocate <%c> to <%s> (allocate in <%s>)\n",
+                  lay->symbols[sym], lay->cells[xic].name, lay->group_names[gi]);
+            }
+            --ws->n_todo;
+            allocate(lay, ws, 0, xic, sym);
+            if (ws->options & OPT_HINT) {
+              free_ws(ws);
+              free_layout(lay);
+              exit(0);
+            }
+            found_any = 1;
           }
         }
-        found_any = 1;
       }
     }
   }

@@ -50,20 +50,30 @@ void format_output(int options)/*{{{*/
   printf("<g id=\"layer1\">\n");
 
   for (i=0; i<lay->nc; i++) {
-    if (state[i] == -2) {
+    int is_marked, is_barred;
+    is_marked = (state[i] == CELL_MARKED);
+    is_barred = (state[i] == CELL_BARRED);
+    if (is_marked || is_barred) {
       /* greyed out cell */
       double x, y;
       double wh;
+      const char *cell_colour = NULL;
       x = offset + scale * ((double) lay->cells[i].rcol);
       y = offset + scale * ((double) lay->cells[i].rrow);
       wh = scale * 1.0;
-      printf("<rect style=\"fill:#d8d8d8;fill-opacity:1.0;stroke:none;\"\n");
+      if (is_marked) cell_colour = "#d8d8d8";
+      else if (is_barred) cell_colour = "#ff0000";
+      printf("<rect style=\"fill:%s;fill-opacity:1.0;stroke:none;\"\n", cell_colour);
       printf("  x=\"%f\" y=\"%f\" width=\"%f\" height=\"%f\" />\n",
           x, y, wh, wh);
-      x = offset + scale * ((double) lay->cells[i].rcol + 0.8);
-      y = offset + scale * ((double) lay->cells[i].rrow + 0.3);
-      printf("<text style=\"font-size:9;font-style:normal;font-variant:normal;font-weight:bold;fill:#000;fill-opacity:1.0;stroke:none;font-family:Luxi Sans;text-anchor:middle;writing-mode:lr-tb\"\n");
-      printf("x=\"%f\" y=\"%f\">%c</text>\n", x, y, grey_sym++);
+      if (is_marked) {
+        x = offset + scale * ((double) lay->cells[i].rcol + 0.8);
+        y = offset + scale * ((double) lay->cells[i].rrow + 0.3);
+        printf("<text style=\"font-size:9;font-style:normal;font-variant:normal;"
+                 "font-weight:bold;fill:#000;fill-opacity:1.0;stroke:none;"
+                 "font-family:Luxi Sans;text-anchor:middle;writing-mode:lr-tb\"\n");
+        printf("x=\"%f\" y=\"%f\">%c</text>\n", x, y, grey_sym++);
+      }
     }
   }
 

@@ -29,16 +29,18 @@ void read_grid(struct layout **lay, int **state, int options)/*{{{*/
   
 
   for (i=0; i<256; i++) {
-    rmap[i] = -1;
+    rmap[i] = CELL_EMPTY;
     valid[i] = 0;
   }
-  rmap['*'] = -2;
+  rmap['*'] = CELL_MARKED;
+  rmap['#'] = CELL_BARRED;
   for (i=0; i<my_lay->ns; i++) {
     rmap[(int) my_lay->symbols[i]] = i;
     valid[(int) my_lay->symbols[i]] = 1;
   }
   valid['.'] = 1;
   valid['*'] = 1;
+  valid['#'] = 1;
 
   for (i=0; i<my_lay->nc; i++) {
     do {
