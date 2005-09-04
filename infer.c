@@ -113,6 +113,7 @@ struct ws {/*{{{*/
   int solvepos;
   int spec_depth;
   int n_todo;
+  int n_marked_todo;
   double score;
 
   /* Pointers/values passed in at the outer level. */
@@ -145,6 +146,7 @@ static struct ws *make_ws(int nc, int ng, int ns)/*{{{*/
   ws->todo = new_array(int, ng);
   ws->poss = new_array(int, nc);
   ws->n_todo = 0;
+  ws->n_marked_todo = -1;
   ws->score = 0.0;
   for (i=0; i<ng; i++) ws->todo[i] = fill;
   for (i=0; i<nc; i++) ws->poss[i] = fill;
@@ -201,6 +203,7 @@ static struct ws *clone_ws(const struct ws *src)/*{{{*/
   ws->ns = src->ns;
   ws->spec_depth = 1 + src->spec_depth;
   ws->n_todo = src->n_todo;
+  ws->n_marked_todo = src->n_marked_todo;
   ws->solvepos = src->solvepos;
   ws->poss = copy_array(src->nc, src->poss); 
   ws->todo = copy_array(src->ng, src->todo);
@@ -312,7 +315,11 @@ static void allocate(struct layout *lay, struct ws *ws, int is_init, int ic, int
   mask = 1<<val;
   NS = lay->ns;
 
+  if (ws->state[ic] == CELL_MARKED) {
+    --ws->n_marked_todo;
+  }
   ws->state[ic] = val;
+
   other_poss = ws->poss[ic] & ~mask;
   ws->poss[ic] = 0;
   if (!is_init && ws->order) {
@@ -915,6 +922,11 @@ static int inner_infer(struct layout *lay, struct ws *ws)/*{{{*/
         case 1:
           /* If the worker made progress, start scanning from the easiest
            * queue again. */
+          if (ws->n_marked_todo == 0) {
+            /* If we're not solving a marked puzzle, this field will be -1 */
+            result = 1;
+            goto get_out;
+          }
           q = ws->base_q;
           do_rescore = 1;
           break;
@@ -1030,6 +1042,19 @@ int infer(struct layout *lay, int *state, int *order, int *score, int options)/*
 
   set_base_queues(lay, ws);
 
+  if (options & OPT_SOLVE_MARKED) {
+    int i;
+    ws->n_marked_todo = 0;
+    for (i=0; i<nc; i++) {
+      if (ws->state[i] == CELL_MARKED) {
+        ++ws->n_marked_todo;
+      }
+    }
+    fprintf(stderr, "Found %d marked cell%s to solve for\n",
+        ws->n_marked_todo,
+        ws->n_marked_todo==1 ? "" : "s");
+  }
+  
   for (i=0; i<nc; i++) {
     if (state[i] >= 0) {
       /* This will clear the poss bits on cells in the same groups, remove todo
@@ -1040,7 +1065,6 @@ int infer(struct layout *lay, int *state, int *order, int *score, int options)/*
       ++ws->n_todo;
     }
   }
-
 
   result = inner_infer(lay, ws);
   if (score) {
