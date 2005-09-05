@@ -122,7 +122,8 @@ int main (int argc, char **argv)/*{{{*/
     OP_MARK,
     OP_GRADE,
     OP_HINT,
-    OP_FORMAT
+    OP_FORMAT,
+    OP_TIDY
   } operation;
   char *layout_name = NULL;
   
@@ -207,6 +208,8 @@ int main (int argc, char **argv)/*{{{*/
       options |= OPT_SPECULATE;
     } else if (!strcmp(*argv, "-t")) {
       options |= OPT_ALLOW_TRIVIAL;
+    } else if (!strcmp(*argv, "-T")) {
+      operation = OP_TIDY;
     } else if (!strcmp(*argv, "-v")) {
       options |= OPT_VERBOSE;
     } else if (!strcmp(*argv, "-y")) {
@@ -276,6 +279,9 @@ int main (int argc, char **argv)/*{{{*/
       break;
     case OP_FORMAT:
       format_output(options);
+      break;
+    case OP_TIDY:
+      tidy(options);
       break;
   }
   return 0;

@@ -12,7 +12,8 @@ OBJ := sku.o \
 	svg.o \
 	reader.o \
 	mark.o \
-	grade.o
+	grade.o \
+	tidy.o
 
 $(PROG) : $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $^

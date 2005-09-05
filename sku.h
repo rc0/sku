@@ -177,10 +177,12 @@ struct solve_option {
   const char *name;
 };
 extern const struct solve_option solve_options[N_SOLVE_OPTIONS];
-
   
 /* In svg.c */
 extern void format_output(int options);
+
+/* In tidy.c */
+extern void tidy(int options);
 
 #endif /* SKU_H */
 
