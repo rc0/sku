@@ -384,7 +384,7 @@ static int try_group_allocate(int gi, struct layout *lay, struct ws *ws, struct 
         }
       }
       if (count == 0) {
-        if (ws->options & OPT_VERBOSE) {
+        if (!(ws->options & OPT_SPECULATE)) {
           fprintf(stderr, "Cannot allocate <%c> in <%s>\n",
               lay->symbols[sym], lay->group_names[gi]);
         }
@@ -680,7 +680,7 @@ static int try_onlyopt(int ic, struct layout *lay, struct ws *ws, struct score *
   if (ws->state[ic] < 0) {
     nb = count_bits(ws->poss[ic]);
     if (nb == 0) {
-      if (ws->options & OPT_VERBOSE) {
+      if (!(ws->options & OPT_SPECULATE)) {
         fprintf(stderr, "Cell <%s> has no options left\n", lay->cells[ic].name);
       }
       return -1;
