@@ -1050,9 +1050,6 @@ int infer(struct layout *lay, int *state, int *order, int *score, int options)/*
         ++ws->n_marked_todo;
       }
     }
-    fprintf(stderr, "Found %d marked cell%s to solve for\n",
-        ws->n_marked_todo,
-        ws->n_marked_todo==1 ? "" : "s");
   }
   
   for (i=0; i<nc; i++) {

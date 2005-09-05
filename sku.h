@@ -105,6 +105,7 @@ struct super_layout {
 #define OPT_ONLYOPT_FIRST (1<<11)
 #define OPT_SCORE (1<<12)
 #define OPT_SOLVE_MARKED (1<<13)
+#define OPT_SOLVE_MINIMAL (1<<14)
 
 #define OPT_NO_LINES     (1<<16)
 #define OPT_NO_SUBSETS   (1<<17)

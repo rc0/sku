@@ -24,6 +24,7 @@ static void usage(void)
       "  -o          : apply 'only option' rule first\n"
       "  -s          : use speculation if logic fails to complete the grid\n"
       "  -A          : show all solutions if using speculation and the puzzle is ambiguous\n"
+      "  -M          : find a minimal solution (for puzzles with marked cells)\n"
       "\n"
       "-b<layout>    : create a blank grid with named <layout>\n"
       "\n"
@@ -178,6 +179,8 @@ int main (int argc, char **argv)/*{{{*/
       apply_level(*argv + 2, &options, &reduce_req_n);
     } else if (!strncmp(*argv, "-m", 2)) {
       iters_for_min = atoi(*argv + 2);
+    } else if (!strcmp(*argv, "-M")) {
+      options |= OPT_SOLVE_MINIMAL;
     } else if (!strcmp(*argv, "-o")) {
       options |= OPT_ONLYOPT_FIRST;
     } else if (!strcmp(*argv, "-r")) {
