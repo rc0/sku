@@ -21,6 +21,8 @@ struct cell {
   short group[NDIM];    /* table of groups the cell is in (-1 for unused dimensions) */
 };
 
+#define SYM(x) (lay->cells[(x)].isym)
+
 struct dline
 {
   /* Start and end of a line for formatted output. */

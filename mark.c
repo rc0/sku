@@ -116,14 +116,29 @@ void mark_cells(int grey_cells, int options)/*{{{*/
     
     for (i=0, j=0; i<grey_cells; i++) {
       int ic;
+      int xc;
       do {
         ic = shade[j++].a;
-      } while ((j < lay->nc) && (!lay->cells[ic].is_terminal));
+      } while ((j < lay->nc) && (!lay->cells[ic].is_terminal) && (state[ic] == CELL_EMPTY));
+
+      /* The check for CELL_EMPTY above is for the case where we're marking
+       * symmetric cells; if an earlier terminal was symmetric with cell 'ic'
+       * we'll already have marked it, in which case move onto the next
+       * terminal. */
+      
       if (j >= lay->nc) {
         fprintf(stderr, "Didn't have enough terminal cells to allocate %d greys (allocated %d)\n", grey_cells, i);
         break;
       }
-      state[ic] = -2;
+      state[ic] = CELL_MARKED;
+      for (xc = SYM(ic); xc != ic; xc = SYM(xc)) {
+        if (state[xc] == CELL_EMPTY) {
+          state[xc] = CELL_MARKED;
+        } else {
+          fprintf(stderr, "warning: <%s> is symmetric with <%s> but can't be marked\n",
+              lay->cells[xc].name, lay->cells[ic].name);
+        }
+      }
     }
     free(order);
     free(copy);

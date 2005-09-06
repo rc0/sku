@@ -1,7 +1,5 @@
 #include "sku.h"
 
-#define SYM(x) (lay->cells[(x)].isym)
-
 static void inner_reduce_symmetrify_blanks(struct layout *lay, int *state, int options)/*{{{*/
 {
   int i, j;
