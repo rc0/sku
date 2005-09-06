@@ -12,9 +12,9 @@ void display(FILE *out, struct layout *lay, int *state)/*{{{*/
     int col = lay->cells[i].pcol;
     int idx = row * lay->pcols + col;
     if (state[i] == CELL_BARRED) {
-      grid[idx] = '#';
-    } else if (state[i] == CELL_MARKED) {
       grid[idx] = '*';
+    } else if (state[i] == CELL_MARKED) {
+      grid[idx] = '#';
     } else if (state[i] == CELL_EMPTY) {
       grid[idx] = '.';
     } else {
