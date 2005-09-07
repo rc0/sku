@@ -42,17 +42,18 @@ struct score {
 /* Returns -1 if an error has been detected,
  * 0 if no work got done,
  * 1 if work was done. */
-typedef int (*WORKER)(int, struct layout *, struct ws *, struct score *score);
+typedef int (*WORKER)(int, struct layout *, struct ws *, int, struct score *score);
   
 struct queue {/*{{{*/
   struct link links; /* .index ignored */
   struct queue *next_to_run;
   struct queue *next_to_push;
+  int opt;
   char *name;
   WORKER worker;
 };
 /*}}}*/
-static struct queue *mk_queue(WORKER worker, struct queue *next_to_run, struct queue *next_to_push, char *name)/*{{{*/
+static struct queue *mk_queue(WORKER worker, struct queue *next_to_run, struct queue *next_to_push, int opt, char *name)/*{{{*/
 {
   struct queue *x;
   x = new(struct queue);
@@ -60,6 +61,7 @@ static struct queue *mk_queue(WORKER worker, struct queue *next_to_run, struct q
   x->worker = worker;
   x->next_to_run = next_to_run;
   x->next_to_push = next_to_push;
+  x->opt = opt;
   x->name = name;
   return x;
 }
@@ -376,7 +378,7 @@ static void allocate(struct layout *lay, struct ws *ws, int is_init, int ic, int
   }
 }
 /*}}}*/
-static int try_group_allocate(int gi, struct layout *lay, struct ws *ws, struct score *score)/*{{{*/
+static int try_group_allocate(int gi, struct layout *lay, struct ws *ws, int opt, struct score *score)/*{{{*/
 {
   /* Return -1 if the solution is broken,
    *        0 if we didn't allocate anything,
@@ -415,7 +417,8 @@ static int try_group_allocate(int gi, struct layout *lay, struct ws *ws, struct 
         } else {
           if (ws->state[xic] != CELL_BARRED) {
             if (ws->options & OPT_VERBOSE) {
-              fprintf(stderr, "Allocate <%c> to <%s> (allocate in <%s>)\n",
+              fprintf(stderr, "(%c) Allocate <%c> to <%s> (allocate in <%s>)\n",
+                  (lay->is_block[gi] ? ' ' : 'l'),
                   lay->symbols[sym], lay->cells[xic].name, lay->group_names[gi]);
             }
             --ws->n_todo;
@@ -436,7 +439,7 @@ static int try_group_allocate(int gi, struct layout *lay, struct ws *ws, struct 
 
 }
 /*}}}*/
-static int try_subsets(int gi, struct layout *lay, struct ws *ws, struct score *score)/*{{{*/
+static int try_subsets(int gi, struct layout *lay, struct ws *ws, int opt, struct score *score)/*{{{*/
 {
   /* Couldn't do any allocates in the group.
    * So try the more sophisticated analysis:
@@ -495,7 +498,7 @@ static int try_subsets(int gi, struct layout *lay, struct ws *ws, struct score *
                 if (score) {
                 } else {
                   if (ws->options & OPT_VERBOSE) {
-                    fprintf(stderr, "Removing <%c> from <%s> (in <%s> due to placement in <%s>)\n",
+                    fprintf(stderr, "(s) Removing <%c> from <%s> (in <%s> due to placement in <%s>)\n",
                         lay->symbols[sym], lay->cells[ic].name,
                         lay->group_names[j], lay->group_names[gi]);
                   }
@@ -518,7 +521,7 @@ static int try_subsets(int gi, struct layout *lay, struct ws *ws, struct score *
 }
 /*}}}*/
 
-static int try_split_internal(int gi, struct layout *lay, struct ws *ws, struct score *score)/*{{{*/
+static int try_split_internal(int gi, struct layout *lay, struct ws *ws, int opt, struct score *score)/*{{{*/
 {
   /* 
    * Deal with this case: suppose the symbols 2,3,5,6 are unallocated within
@@ -585,7 +588,7 @@ static int try_split_internal(int gi, struct layout *lay, struct ws *ws, struct 
             if (score) {
             } else {
               if (ws->options & OPT_VERBOSE) {
-                fprintf(stderr, "Removing <");
+                fprintf(stderr, "(i) Removing <");
                 show_symbols_in_set(NS, lay->symbols, ws->poss[ci] & ~intersect[sym]);
                 fprintf(stderr, "> from <%s>, must be one of <", lay->cells[ci].name);
                 show_symbols_in_set(NS, lay->symbols, intersect[sym]);
@@ -609,103 +612,13 @@ examine_next_symbol:
   return did_anything ? 1 : 0;
 }
 /*}}}*/
-static int try_split_external(int gi, struct layout *lay, struct ws *ws, struct score *score)/*{{{*/
-{
-  /* 
-   * Deal with this case: suppose the symbols 2,3,5 are unallocated within
-   * a group.  Suppose there are three cells
-   *   A that could be 2,3
-   *   B that could be 2,3
-   *   C that could be 3,5
-   * and neither 2 nor 3 could go anywhere else within the group under
-   * analysis.  Then we can eliminate 3 as an option on C.
-   * */
-
-  int NC, NS, NG;
-  int did_anything = 0;
-  int did_anything_this_iter;
-  int i, ci, j, cj;
-  short *base;
-  char *flags;
-
-  NS = lay->ns;
-  NC = lay->nc;
-  NG = lay->ng;
-
-  base = lay->groups + gi*NS;
-  flags = new_array(char, NS);
-
-  do {
-    did_anything_this_iter = 0;
-    for (i=0; i<NS; i++) {
-      int count;
-      ci = base[i];
-      if (!ws->poss[ci]) continue;
-      count = 0; /* including the 'i' cell!! */
-      memset(flags, 0, NS);
-      for (j=0; j<NS; j++) {
-        cj = base[j];
-        if (ws->poss[ci] == ws->poss[cj]) {
-          ++count;
-          flags[j] = 1;
-        }
-      }
-      /* count==1 is a normal allocate done elsewhere! */
-      if ((count > 1) && (count == count_bits(ws->poss[ci]))) {
-        /* got one. */
-        for (j=0; j<NS; j++) {
-          cj = base[j];
-          if (!flags[j] && (ws->poss[cj] & ws->poss[ci])) {
-            did_anything = 1;
-            if (score) {
-            } else {
-              did_anything_this_iter = 1;
-              if (ws->options & OPT_VERBOSE) {
-                int k, fk;
-                fprintf(stderr, "Removing <");
-                show_symbols_in_set(NS, lay->symbols, ws->poss[cj] & ws->poss[ci]);
-                fprintf(stderr, "> from <%s:", lay->cells[cj].name);
-                show_symbols_in_set(NS, lay->symbols, ws->poss[cj]);
-                fprintf(stderr, ">, because <");
-                show_symbols_in_set(NS, lay->symbols, ws->poss[ci]);
-                fprintf(stderr, "> must be in <");
-                fk = 1;
-                for (k=0; k<NS; k++) {
-                  int ck = base[k];
-                  if (flags[k]) {
-                    if (!fk) {
-                      fprintf(stderr, ",");
-                    }
-                    fk = 0;
-                    fprintf(stderr, "%s(", lay->cells[ck].name);
-                    show_symbols_in_set(NS, lay->symbols,ws->poss[ck]);
-                    fprintf(stderr, ")");
-                  }
-                }
-                fprintf(stderr, "> in <%s>\n", lay->group_names[gi]);
-              }
-              ws->poss[cj] &= ~ws->poss[ci];
-              requeue_cell(cj, lay, ws);
-              requeue_groups(lay, ws, cj);
-            }
-          }
-        }
-      }
-    }
-  } while (did_anything_this_iter);
-
-  free(flags);
-  return did_anything ? 1 : 0;
-}
-/*}}}*/
-
 static int subset_or_eq_p(int x, int y)/*{{{*/
 {
   if (x & ~y) return 0;
   else return 1;
 }
 /*}}}*/
-static int try_split_external_ext(int gi, struct layout *lay, struct ws *ws, struct score *score)/*{{{*/
+static int try_split_external(int gi, struct layout *lay, struct ws *ws, int opt, struct score *score)/*{{{*/
 {
   /* 
    * Deal with this case: suppose the symbols 2,3,5 are unallocated within
@@ -742,19 +655,20 @@ static int try_split_external_ext(int gi, struct layout *lay, struct ws *ws, str
       memset(flags, 0, NS);
       for (j=0; j<NS; j++) {
         cj = base[j];
-        /* [ci] is the cell with the most possibilities */
-        if (ws->poss[cj] && subset_or_eq_p(ws->poss[cj], ws->poss[ci])) {
+        if (opt ? (ws->poss[cj]
+	            && subset_or_eq_p(ws->poss[cj], ws->poss[ci]))
+	        : (ws->poss[ci] == ws->poss[cj])) {
           ++count;
           flags[j] = 1;
         } else if ((ws->poss[cj] & ws->poss[ci]) &&
-            !subset_or_eq_p(ws->poss[ci], ws->poss[cj])) {
+	           (opt ? !subset_or_eq_p(ws->poss[ci], ws->poss[cj])
+		        : (ws->poss[ci] != ws->poss[cj])
+		   )) {
           other_count++; /* cells we'll be able to remove possibilities from */
         }
       }
       /* count==1 is a normal allocate done elsewhere! */
       if ((count > 1) && (other_count > 1) && (count == count_bits(ws->poss[ci]))) {
-
-
         /* got one. */
         for (j=0; j<NS; j++) {
           cj = base[j];
@@ -765,7 +679,7 @@ static int try_split_external_ext(int gi, struct layout *lay, struct ws *ws, str
               did_anything_this_iter = 1;
               if (ws->options & OPT_VERBOSE) {
                 int k, fk;
-                fprintf(stderr, "Removing (x) <");
+                fprintf(stderr, "(%c) Removing <", opt ? 'E' : 'e');
                 show_symbols_in_set(NS, lay->symbols, ws->poss[cj] & ws->poss[ci]);
                 fprintf(stderr, "> from <%s:", lay->cells[cj].name);
                 show_symbols_in_set(NS, lay->symbols, ws->poss[cj]);
@@ -801,7 +715,8 @@ static int try_split_external_ext(int gi, struct layout *lay, struct ws *ws, str
   return did_anything ? 1 : 0;
 }
 /*}}}*/
-static int try_onlyopt(int ic, struct layout *lay, struct ws *ws, struct score *score)/*{{{*/
+
+static int try_onlyopt(int ic, struct layout *lay, struct ws *ws, int opt, struct score *score)/*{{{*/
 {
   int NC;
   int nb;
@@ -818,7 +733,7 @@ static int try_onlyopt(int ic, struct layout *lay, struct ws *ws, struct score *
       } else {
         int sym = decode(ws->poss[ic]);
         if (ws->options & OPT_VERBOSE) {
-          fprintf(stderr, "Allocate <%c> to <%s> (only option)\n",
+          fprintf(stderr, "(o) Allocate <%c> to <%s> (only option)\n",
               lay->symbols[sym], lay->cells[ic].name);
         }
         --ws->n_todo;
@@ -954,7 +869,7 @@ static void do_scoring(struct layout *lay, struct ws *ws)/*{{{*/
   for (i=0; i<nc; i++) {
     if (ws->state[i] < 0) {
       ++n_open_cells;
-      status = try_onlyopt(i, lay, ws, &score);
+      status = try_onlyopt(i, lay, ws, 0, &score);
       if (status) {
         ++n_live_onlyopt, ++n_live_resources;
         this_score += 1.0 / 5.0;
@@ -965,7 +880,7 @@ static void do_scoring(struct layout *lay, struct ws *ws)/*{{{*/
     if (ws->todo[i] > 0) {
       status = 0;
       ++n_open_groups;
-      status |= status0 = try_group_allocate(i, lay, ws, &score);
+      status |= status0 = try_group_allocate(i, lay, ws, 0, &score);
       if (status0) {
         ++n_live_alloc;
         if (lay->is_block[i]) {
@@ -974,17 +889,17 @@ static void do_scoring(struct layout *lay, struct ws *ws)/*{{{*/
           this_score += 1.0 / 3.0;
         }
       }
-      status |= status0 = try_subsets(i, lay, ws, &score);
+      status |= status0 = try_subsets(i, lay, ws, 0, &score);
       if (status0) {
         ++n_live_subsets;
         this_score += 1.0 / 5.0;
       }
-      status |= status0 = try_split_external(i, lay, ws, &score);
+      status |= status0 = try_split_external(i, lay, ws, 0, &score);
       if (status0) {
         ++n_live_remote;
         this_score += 1.0 / 10.0;
       }
-      status |= status0 = try_split_internal(i, lay, ws, &score);
+      status |= status0 = try_split_internal(i, lay, ws, 0, &score);
       if (status0) {
         ++n_live_near;
         this_score += 1.0 / 10.0;
@@ -1036,7 +951,7 @@ static int inner_infer(struct layout *lay, struct ws *ws)/*{{{*/
     lk = dequeue(q);
     if (lk) {
       int status;
-      status = (q->worker)(lk->index, lay, ws, NULL);
+      status = (q->worker)(lk->index, lay, ws, q->opt, NULL);
       switch (status) {
         case -1:
           goto get_out;
@@ -1124,24 +1039,24 @@ int infer(struct layout *lay, int *state, int *order, int *score, int options)/*
     next_group_push = NULL;
 
     if (!(options & OPT_NO_SPLIT_INT)) {
-      struct queue *our_q = mk_queue(try_split_internal, next_run, next_group_push, "Near");
+      struct queue *our_q = mk_queue(try_split_internal, next_run, next_group_push, 0, "Interior");
       next_run = next_group_push = our_q;
     }
     if (!(options & OPT_NO_SPLIT_EXTX)) {
-      struct queue *our_q = mk_queue(try_split_external_ext, next_run, next_group_push, "Exterior_X");
+      struct queue *our_q = mk_queue(try_split_external, next_run, next_group_push, 1, "Exterior_X");
       next_run = next_group_push = our_q;
     }
     if (!(options & OPT_NO_SPLIT_EXT)) {
-      struct queue *our_q = mk_queue(try_split_external, next_run, next_group_push, "Remote");
+      struct queue *our_q = mk_queue(try_split_external, next_run, next_group_push, 0, "Exterior");
       next_run = next_group_push = our_q;
     }
     if (!(options & OPT_NO_SUBSETS)) {
-      struct queue *our_q = mk_queue(try_subsets, next_run, next_group_push, "Subsets");
+      struct queue *our_q = mk_queue(try_subsets, next_run, next_group_push, 0, "Subsets");
       next_run = next_group_push = our_q;
     }
     if (!(options & OPT_ONLYOPT_FIRST)) {
       if (!(options & OPT_NO_ONLYOPT)) {
-        struct queue *our_q = mk_queue(try_onlyopt, next_run, next_cell_push, "Onlyopt");
+        struct queue *our_q = mk_queue(try_onlyopt, next_run, next_cell_push, 0, "Onlyopt");
         next_run = next_cell_push = our_q;
       }
     }
@@ -1152,17 +1067,17 @@ int infer(struct layout *lay, int *state, int *order, int *score, int options)/*
     next_line_push  = next_group_push;
 
     if (!(options & OPT_NO_LINES)) {
-      struct queue *our_q = mk_queue(try_group_allocate, next_run, next_line_push, "Lines");
+      struct queue *our_q = mk_queue(try_group_allocate, next_run, next_line_push, 0, "Lines");
       next_run = next_line_push = our_q;
     }
     if (1) { /* allocate in blocks. */
-      struct queue *our_q = mk_queue(try_group_allocate, next_run, next_block_push, "Blocks");
+      struct queue *our_q = mk_queue(try_group_allocate, next_run, next_block_push, 0, "Blocks");
       next_run = next_block_push = our_q;
     }
 
     if (options & OPT_ONLYOPT_FIRST) {
       if (!(options & OPT_NO_ONLYOPT)) {
-        struct queue *our_q = mk_queue(try_onlyopt, next_run, next_cell_push, "Onlyopt");
+        struct queue *our_q = mk_queue(try_onlyopt, next_run, next_cell_push, 0, "Onlyopt");
         next_run = next_cell_push = our_q;
       }
     }
