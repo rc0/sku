@@ -238,6 +238,9 @@ int main (int argc, char **argv)/*{{{*/
     }
   }
 
+  if (options & OPT_NO_SPLIT_EXT) options |= OPT_NO_SPLIT_EXTX;
+  if (reduce_req_n & OPT_NO_SPLIT_EXT) options |= OPT_NO_SPLIT_EXTX;
+
   if (options & OPT_NO_LINES) {
     options |= OPT_IMPLY_NO_LINES;
   }
