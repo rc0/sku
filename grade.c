@@ -24,13 +24,12 @@ struct option {
   const char *name;
 };
 
-#define N_OPTIONS 5
-
 const struct solve_option solve_options[N_SOLVE_OPTIONS] = {/*{{{*/
   { OPT_NO_LINES,     "Lines" },
   { OPT_NO_SUBSETS,   "Subsets" },
   { OPT_NO_ONLYOPT,   "Only option" },
   { OPT_NO_SPLIT_EXT, "Split (exterior)" },
+  { OPT_NO_SPLIT_EXTX, "Split (exterior_x)" },
   { OPT_NO_SPLIT_INT, "Split (interior)" }
 };
 /*}}}*/
@@ -123,7 +122,7 @@ void grade(int options)/*{{{*/
       if (i==(limit-1)) {
         fprintf(stderr, " (no special techniques required)\n");
       } else {
-        for (j=0; j<N_OPTIONS; j++) {
+        for (j=0; j<N_SOLVE_OPTIONS; j++) {
           int mask = 1<<j;
           if (!(i & mask)) {
             fprintf(stderr, "<%s> ", solve_options[j].name);

@@ -165,6 +165,7 @@ int main (int argc, char **argv)/*{{{*/
             case 'l': options |= OPT_NO_LINES;   break;
             case 'o': options |= OPT_NO_ONLYOPT; break;
             case 's': options |= OPT_NO_SUBSETS; break;
+            case 'x': options |= OPT_NO_SPLIT_EXTX;  break;
             default: fprintf(stderr, "Can't use %c with -E\n", *p);
               break;
           }
@@ -208,6 +209,7 @@ int main (int argc, char **argv)/*{{{*/
             case 'l': reduce_req_n |= OPT_NO_LINES;   break;
             case 'o': reduce_req_n |= OPT_NO_ONLYOPT; break;
             case 's': reduce_req_n |= OPT_NO_SUBSETS; break;
+            case 'x': reduce_req_n |= OPT_NO_SPLIT_EXTX;  break;
             default: fprintf(stderr, "Can't use %c with -R\n", *p);
               break;
           }

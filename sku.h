@@ -133,9 +133,10 @@ struct super_layout {
 #define OPT_NO_ONLYOPT   (1<<18)
 #define OPT_NO_SPLIT_INT (1<<19)
 #define OPT_NO_SPLIT_EXT (1<<20)
+#define OPT_NO_SPLIT_EXTX (1<<21)
 
-#define OPT_IMPLY_NO_LINES (OPT_NO_SUBSETS | OPT_NO_SPLIT_EXT | OPT_NO_SPLIT_INT)
-#define OPT_MAKE_EASIER (OPT_NO_LINES | OPT_NO_SUBSETS | OPT_NO_ONLYOPT | OPT_NO_SPLIT_INT | OPT_NO_SPLIT_EXT)
+#define OPT_IMPLY_NO_LINES (OPT_NO_SUBSETS | OPT_NO_SPLIT_EXT | OPT_NO_SPLIT_INT | OPT_NO_SPLIT_EXTX)
+#define OPT_MAKE_EASIER (OPT_NO_LINES | OPT_NO_SUBSETS | OPT_NO_ONLYOPT | OPT_NO_SPLIT_INT | OPT_NO_SPLIT_EXT | OPT_NO_SPLIT_EXTX)
 
 /* ============================================================================ */
 
@@ -192,7 +193,7 @@ extern void mark_cells(int grey_cells, int options);
 extern void grade(int options);
 extern void grade_find_sol_reqs(struct layout *lay, int *state, int options, char *result, char *min_result);
 
-#define N_SOLVE_OPTIONS 5
+#define N_SOLVE_OPTIONS 6
 struct solve_option {
   int opt_flag;
   const char *name;
