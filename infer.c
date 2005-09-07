@@ -626,24 +626,28 @@ static int try_split_external(int gi, struct layout *lay, struct ws *ws, struct 
   int did_anything_this_iter;
   int i, ci, j, cj;
   short *base;
+  char *flags;
 
   NS = lay->ns;
   NC = lay->nc;
   NG = lay->ng;
 
   base = lay->groups + gi*NS;
+  flags = new_array(char, NS);
 
   do {
     did_anything_this_iter = 0;
-    for (i=0; i<NS-1; i++) {
+    for (i=0; i<NS; i++) {
       int count;
       ci = base[i];
       if (!ws->poss[ci]) continue;
-      count = 1; /* including the 'i' cell!! */
-      for (j=i+1; j<NS; j++) {
+      count = 0; /* including the 'i' cell!! */
+      memset(flags, 0, NS);
+      for (j=0; j<NS; j++) {
         cj = base[j];
         if (ws->poss[ci] == ws->poss[cj]) {
           ++count;
+          flags[j] = 1;
         }
       }
       /* count==1 is a normal allocate done elsewhere! */
@@ -651,7 +655,7 @@ static int try_split_external(int gi, struct layout *lay, struct ws *ws, struct 
         /* got one. */
         for (j=0; j<NS; j++) {
           cj = base[j];
-          if ((ws->poss[cj] != ws->poss[ci]) && (ws->poss[cj] & ws->poss[ci])) {
+          if (!flags[j] && (ws->poss[cj] & ws->poss[ci])) {
             did_anything = 1;
             if (score) {
             } else {
@@ -668,12 +672,14 @@ static int try_split_external(int gi, struct layout *lay, struct ws *ws, struct 
                 fk = 1;
                 for (k=0; k<NS; k++) {
                   int ck = base[k];
-                  if (ws->poss[ck] == ws->poss[ci]) {
+                  if (flags[k]) {
                     if (!fk) {
                       fprintf(stderr, ",");
                     }
                     fk = 0;
-                    fprintf(stderr, "%s", lay->cells[ck].name);
+                    fprintf(stderr, "%s(", lay->cells[ck].name);
+                    show_symbols_in_set(NS, lay->symbols,ws->poss[ck]);
+                    fprintf(stderr, ")");
                   }
                 }
                 fprintf(stderr, "> in <%s>\n", lay->group_names[gi]);
@@ -688,16 +694,17 @@ static int try_split_external(int gi, struct layout *lay, struct ws *ws, struct 
     }
   } while (did_anything_this_iter);
 
+  free(flags);
   return did_anything ? 1 : 0;
 }
 /*}}}*/
 
-static int subset_or_eq_p(int x, int y)
+static int subset_or_eq_p(int x, int y)/*{{{*/
 {
   if (x & ~y) return 0;
   else return 1;
 }
-
+/*}}}*/
 static int try_split_external_ext(int gi, struct layout *lay, struct ws *ws, struct score *score)/*{{{*/
 {
   /* 
@@ -747,17 +754,6 @@ static int try_split_external_ext(int gi, struct layout *lay, struct ws *ws, str
       /* count==1 is a normal allocate done elsewhere! */
       if ((count > 1) && (other_count > 1) && (count == count_bits(ws->poss[ci]))) {
 
-        if (0) {
-          int q;
-          fprintf(stderr, "In <%s> got count=%d i=%d\n", lay->group_names[gi], count, i);
-          for (q=0; q<NS; q++) {
-            int qc = base[q];
-            fprintf(stderr, "Cell %d <%s> flag=%d options=<", q, lay->cells[qc].name, flags[q]);
-            show_symbols_in_set(NS, lay->symbols, ws->poss[qc]);
-            fprintf(stderr, ">\n");
-          }
-          exit(1);
-        }
 
         /* got one. */
         for (j=0; j<NS; j++) {
