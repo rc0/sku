@@ -521,6 +521,262 @@ static int try_subsets(int gi, struct layout *lay, struct ws *ws, int opt, struc
 }
 /*}}}*/
 
+static int do_ext_remove(int gi, struct layout *lay, struct ws *ws, int n, int symbol_set, int matching_cells)/*{{{*/
+{
+  int i;
+  int NS = lay->ns;
+  short *base;
+  int did_anything = 0;
+  base = lay->groups + (gi * NS);
+#if 0
+  fprintf(stderr, "Symbol set : ");
+  show_symbols_in_set(NS, lay->symbols, symbol_set);
+  fprintf(stderr, "\n");
+  for (i=0; i<NS; i++) {
+    int ic = base[i];
+    fprintf(stderr, "  %c %s : ",
+        ((1<<i) & matching_cells) ? '*' : ' ',
+        lay->cells[ic].name);
+    show_symbols_in_set(NS, lay->symbols, ws->poss[ic]);
+    fprintf(stderr, "\n");
+  }
+#endif
+  
+  for (i=0; i<NS; i++) {
+    int ic = base[i];
+    int mask = (1 << i);
+    if (mask & matching_cells) continue;
+    if (ws->poss[ic] & symbol_set) {
+      did_anything = 1;
+      if (ws->options & OPT_VERBOSE) {
+        int k, fk;
+        fprintf(stderr, "(e%d) Removing <", n);
+        show_symbols_in_set(NS, lay->symbols, symbol_set & ws->poss[ic]);
+        fprintf(stderr, "> from <%s:", lay->cells[ic].name);
+        show_symbols_in_set(NS, lay->symbols, ws->poss[ic]);
+        fprintf(stderr, ">, because <");
+        show_symbols_in_set(NS, lay->symbols, symbol_set);
+        fprintf(stderr, "> must be in <");
+        fk = 1;
+        for (k=0; k<NS; k++) {
+          if (matching_cells & (1<<k)) {
+            int ck = base[k];
+            if (!fk) {
+              fprintf(stderr, ",");
+            }
+            fk = 0;
+            fprintf(stderr, "%s(", lay->cells[ck].name);
+            show_symbols_in_set(NS, lay->symbols, ws->poss[ck]);
+            fprintf(stderr, ")");
+          }
+        }
+        fprintf(stderr, "> in <%s>\n", lay->group_names[gi]);
+      }
+      ws->poss[ic] &= ~symbol_set;
+      requeue_cell(ic, lay, ws);
+      requeue_groups(lay, ws, ic);
+    }
+  }
+  return did_anything;
+}
+/*}}}*/
+static int do_int_remove(int gi, struct layout *lay, struct ws *ws, int n, int cell_set, int matching_symbols)/*{{{*/
+{
+  int i;
+  int NS = lay->ns;
+  short *base;
+  int did_anything = 0;
+  base = lay->groups + (gi * NS);
+
+#if 0
+  fprintf(stderr, "Matching symbols : ");
+  show_symbols_in_set(NS, lay->symbols, matching_symbols);
+  fprintf(stderr, "\n");
+  for (i=0; i<NS; i++) {
+    int ic = base[i];
+    fprintf(stderr, "  %c %s : ",
+        ((1<<i) & cell_set) ? '*' : ' ',
+        lay->cells[ic].name);
+    show_symbols_in_set(NS, lay->symbols, ws->poss[ic]);
+    fprintf(stderr, "\n");
+  }
+#endif
+  for (i=0; i<NS; i++) {
+    if (cell_set & (1<<i)) {
+      int ic = base[i];
+      if (ws->poss[ic] & ~matching_symbols) {
+        if (ws->options & OPT_VERBOSE) {
+          fprintf(stderr, "(i%d) Removing <", n);
+          show_symbols_in_set(NS, lay->symbols, ws->poss[ic] & ~matching_symbols);
+          fprintf(stderr, "> from <%s>, must be one of <", lay->cells[ic].name);
+          show_symbols_in_set(NS, lay->symbols, matching_symbols);
+          fprintf(stderr, "> in <%s>\n", lay->group_names[gi]);
+        }
+        did_anything = 1;
+        ws->poss[ic] &= matching_symbols;
+        requeue_cell(ic, lay, ws);
+        requeue_groups(lay, ws, ic);
+      }
+    }
+  }
+  return did_anything;
+}
+/*}}}*/
+static int try_partition(int gi, struct layout *lay, struct ws *ws, int opt, struct score *score)/*{{{*/
+{
+  int N, NN;
+  int cmap[64], icmap[64];
+  int smap[64], ismap[64];
+  int fposs[64], rposs[64];
+  int i, j, k;
+  short *base;
+  
+  base = lay->groups + (gi * lay->ns);
+  NN = N = count_bits(ws->todo[gi]);
+  N >>= 1; /* Only have to examine up to 1/2 that number */
+  N++;
+  if (N > 4) N = 4; /* Maximise for now. */
+
+  memset(rposs, 0, sizeof(int) * lay->ns);
+  /* Loop over symbols */
+  j = 0;
+  for (i=0; i<lay->ns; i++) {
+    int mask = 1<<i;
+    if (mask & ws->todo[gi]) {
+      smap[j] = i;
+      ismap[i] = j;
+      j++;
+    }
+  }
+  if (j != NN) {
+    fprintf(stderr, "j != NN at %d\n", __LINE__);
+    exit(1);
+  }
+  /* Loop over cells */
+  j = 0;
+  for (i=0; i<lay->ns; i++) {
+    int ic = base[i];
+    if (ws->state[ic] < 0) {
+      cmap[j] = i;
+      icmap[i] = j;
+      fposs[j] = ws->poss[ic];
+      for (k=0; k<lay->ns; k++) {
+        int mask = 1<<k;
+        int kk = ismap[k];
+        if (mask & ws->poss[ic]) {
+          /* Build map of which cells can take which symbols. */
+          rposs[kk] |= (1<<i);
+        }
+      }
+      j++;
+    }
+  }
+  if (j != NN) {
+    fprintf(stderr, "j != NN at %d\n", __LINE__);
+    exit(1);
+  }
+
+  for (i=2; i<N; i++) {
+    switch (i) {
+      case 2:/*{{{*/
+        {
+          int a0, a1;
+          for (a0 = 1; a0 < NN; a0++) {
+            for (a1 = 0; a1 < a0; a1++) {
+              int U;
+              U = fposs[a0] | fposs[a1];
+              if (count_bits(U) == 2) {
+                if (!score) {
+                  int matching_cells = (1 << cmap[a0]) | (1 << cmap[a1]);
+                  if (do_ext_remove(gi, lay, ws, 2, U, matching_cells)) 
+                    return 1;
+                }
+              }
+              U = rposs[a0] | rposs[a1];
+              if (count_bits(U) == 2) {
+                if (!score) {
+                  int matching_symbols = (1 << smap[a0]) | (1 << smap[a1]);
+                  /* Hit : interior split */
+                  if (do_int_remove(gi, lay, ws, 2, U, matching_symbols)) 
+                    return 1;
+                }
+              }
+            }
+          }
+        } 
+        break;
+/*}}}*/
+      case 3:/*{{{*/
+        {
+          int a0, a1, a2;
+          for (a0 = 2; a0 < NN; a0++) {
+            for (a1 = 1; a1 < a0; a1++) {
+              for (a2 = 0; a2 < a1; a2++) {
+                int U;
+                U = fposs[a0] | fposs[a1] | fposs[a2];
+                if (count_bits(U) == 3) {
+                  if (!score) {
+                    int matching_cells = (1 << cmap[a0]) | (1 << cmap[a1]) | (1 << cmap[a2]);
+                    if (do_ext_remove(gi, lay, ws, 3, U, matching_cells)) 
+                      return 1;
+                  }
+                }
+                U = rposs[a0] | rposs[a1] | rposs[a2];
+                if (count_bits(U) == 3) {
+                  if (!score) {
+                    int matching_symbols = (1 << smap[a0]) | (1 << smap[a1]) | (1 << smap[a2]);
+                    /* Hit : interior split */
+                    if (do_int_remove(gi, lay, ws, 3, U, matching_symbols))
+                      return 1;
+                  }
+                }
+              }
+            }
+          }
+        } 
+        break;
+/*}}}*/
+      case 4:/*{{{*/
+        {
+          int a0, a1, a2, a3;
+          for (a0 = 3; a0 < NN; a0++) {
+            for (a1 = 2; a1 < a0; a1++) {
+              for (a2 = 1; a2 < a1; a2++) {
+                for (a3 = 0; a3 < a2; a3++) {
+                  int U;
+                  U = fposs[a0] | fposs[a1] | fposs[a2] | fposs[a3];
+                  if (count_bits(U) == 4) {
+                    if (!score) {
+                      int matching_cells = (1 << cmap[a0]) | (1 << cmap[a1]) | (1 << cmap[a2]) | (1 << cmap[a3]);
+                      if (do_ext_remove(gi, lay, ws, 4, U, matching_cells)) 
+                        return 1;
+                    }
+                  }
+                  U = rposs[a0] | rposs[a1] | rposs[a2] | rposs[a3];
+                  if (count_bits(U) == 4) {
+                    if (!score) {
+                      int matching_symbols = (1 << smap[a0]) | (1 << smap[a1]) | (1 << smap[a2]) | (1 << smap[a3]);
+                      /* Hit : interior split */
+                      if (do_int_remove(gi, lay, ws, 4, U, matching_symbols)) {
+                        return 1;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } 
+        break;
+/*}}}*/
+      default:
+        fprintf(stderr, "Not handled yet\n");
+    }
+  }
+  return 0;
+}
+/*}}}*/
+
 static int try_split_internal(int gi, struct layout *lay, struct ws *ws, int opt, struct score *score)/*{{{*/
 {
   /* 
@@ -951,7 +1207,15 @@ static int inner_infer(struct layout *lay, struct ws *ws)/*{{{*/
     lk = dequeue(q);
     if (lk) {
       int status;
+#if 0
+      if (lk->index == 12) {
+        fprintf(stderr, "Running %s on %d\n", q->name, lk->index);
+      }
+#endif
       status = (q->worker)(lk->index, lay, ws, q->opt, NULL);
+#if 0
+      fprintf(stderr, "  status = %d\n", status);
+#endif
       switch (status) {
         case -1:
           goto get_out;
@@ -1038,6 +1302,7 @@ int infer(struct layout *lay, int *state, int *order, int *score, int options)/*
     next_cell_push = NULL;
     next_group_push = NULL;
 
+#if 0
     if (!(options & OPT_NO_SPLIT_INT)) {
       struct queue *our_q = mk_queue(try_split_internal, next_run, next_group_push, 0, "Interior");
       next_run = next_group_push = our_q;
@@ -1050,6 +1315,13 @@ int infer(struct layout *lay, int *state, int *order, int *score, int options)/*
       struct queue *our_q = mk_queue(try_split_external, next_run, next_group_push, 0, "Exterior");
       next_run = next_group_push = our_q;
     }
+#endif
+    
+    if (!(options & OPT_NO_SPLIT_EXT)) {
+      struct queue *our_q = mk_queue(try_partition, next_run, next_group_push, 0, "Partition");
+      next_run = next_group_push = our_q;
+    }
+
     if (!(options & OPT_NO_SUBSETS)) {
       struct queue *our_q = mk_queue(try_subsets, next_run, next_group_push, 0, "Subsets");
       next_run = next_group_push = our_q;
