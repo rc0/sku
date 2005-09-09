@@ -62,12 +62,13 @@ static struct queue *mk_queue(WORKER worker, struct queue *next_to_run, struct q
   x->next_to_run = next_to_run;
   x->next_to_push = next_to_push;
   x->opt = opt;
-  x->name = name;
+  x->name = strdup(name);
   return x;
 }
 /*}}}*/
 static void free_queue(struct queue *x)/*{{{*/
 {
+  free(x->name);
   free(x);
 }
 /*}}}*/
@@ -550,7 +551,7 @@ static int do_ext_remove(int gi, struct layout *lay, struct ws *ws, int n, int s
       did_anything = 1;
       if (ws->options & OPT_VERBOSE) {
         int k, fk;
-        fprintf(stderr, "(e%d) Removing <", n);
+        fprintf(stderr, "(pe%d) Removing <", n);
         show_symbols_in_set(NS, lay->symbols, symbol_set & ws->poss[ic]);
         fprintf(stderr, "> from <%s:", lay->cells[ic].name);
         show_symbols_in_set(NS, lay->symbols, ws->poss[ic]);
@@ -606,7 +607,7 @@ static int do_int_remove(int gi, struct layout *lay, struct ws *ws, int n, int c
       int ic = base[i];
       if (ws->poss[ic] & ~matching_symbols) {
         if (ws->options & OPT_VERBOSE) {
-          fprintf(stderr, "(i%d) Removing <", n);
+          fprintf(stderr, "(pi%d) Removing <", n);
           show_symbols_in_set(NS, lay->symbols, ws->poss[ic] & ~matching_symbols);
           fprintf(stderr, "> from <%s>, must be one of <", lay->cells[ic].name);
           show_symbols_in_set(NS, lay->symbols, matching_symbols);
@@ -631,12 +632,13 @@ static int try_partition(int gi, struct layout *lay, struct ws *ws, int opt, str
   int i, j, k;
   short *base;
   
-  base = lay->groups + (gi * lay->ns);
   NN = N = count_bits(ws->todo[gi]);
-  N >>= 1; /* Only have to examine up to 1/2 that number */
-  N++;
-  if (N > 4) N = 4; /* Maximise for now. */
+  N = (N+1) >> 1;
+  /* If we're being told to look for partitions bigger than 1/2 the number of
+   * entries left, we're wasting our time. */
+  if (opt > N) return 0;
 
+  base = lay->groups + (gi * lay->ns);
   memset(rposs, 0, sizeof(int) * lay->ns);
   /* Loop over symbols */
   j = 0;
@@ -676,88 +678,121 @@ static int try_partition(int gi, struct layout *lay, struct ws *ws, int opt, str
     exit(1);
   }
 
-  for (i=2; i<N; i++) {
-    switch (i) {
-      case 2:/*{{{*/
-        {
-          int a0, a1;
-          for (a0 = 1; a0 < NN; a0++) {
-            for (a1 = 0; a1 < a0; a1++) {
+  switch (opt) {
+    case 2:/*{{{*/
+      {
+        int a0, a1;
+        for (a0 = 1; a0 < NN; a0++) {
+          for (a1 = 0; a1 < a0; a1++) {
+            int U;
+            U = fposs[a0] | fposs[a1];
+            if (count_bits(U) == 2) {
+              if (!score) {
+                int matching_cells = (1 << cmap[a0]) | (1 << cmap[a1]);
+                if (do_ext_remove(gi, lay, ws, 2, U, matching_cells)) 
+                  return 1;
+              }
+            }
+            U = rposs[a0] | rposs[a1];
+            if (count_bits(U) == 2) {
+              if (!score) {
+                int matching_symbols = (1 << smap[a0]) | (1 << smap[a1]);
+                /* Hit : interior split */
+                if (do_int_remove(gi, lay, ws, 2, U, matching_symbols)) 
+                  return 1;
+              }
+            }
+          }
+        }
+      } 
+      break;
+/*}}}*/
+    case 3:/*{{{*/
+      {
+        int a0, a1, a2;
+        for (a0 = 2; a0 < NN; a0++) {
+          for (a1 = 1; a1 < a0; a1++) {
+            for (a2 = 0; a2 < a1; a2++) {
               int U;
-              U = fposs[a0] | fposs[a1];
-              if (count_bits(U) == 2) {
+              U = fposs[a0] | fposs[a1] | fposs[a2];
+              if (count_bits(U) == 3) {
                 if (!score) {
-                  int matching_cells = (1 << cmap[a0]) | (1 << cmap[a1]);
-                  if (do_ext_remove(gi, lay, ws, 2, U, matching_cells)) 
+                  int matching_cells = (1 << cmap[a0]) | (1 << cmap[a1]) | (1 << cmap[a2]);
+                  if (do_ext_remove(gi, lay, ws, 3, U, matching_cells)) 
                     return 1;
                 }
               }
-              U = rposs[a0] | rposs[a1];
-              if (count_bits(U) == 2) {
+              U = rposs[a0] | rposs[a1] | rposs[a2];
+              if (count_bits(U) == 3) {
                 if (!score) {
-                  int matching_symbols = (1 << smap[a0]) | (1 << smap[a1]);
+                  int matching_symbols = (1 << smap[a0]) | (1 << smap[a1]) | (1 << smap[a2]);
                   /* Hit : interior split */
-                  if (do_int_remove(gi, lay, ws, 2, U, matching_symbols)) 
+                  if (do_int_remove(gi, lay, ws, 3, U, matching_symbols))
                     return 1;
                 }
               }
             }
           }
-        } 
-        break;
+        }
+      } 
+      break;
 /*}}}*/
-      case 3:/*{{{*/
-        {
-          int a0, a1, a2;
-          for (a0 = 2; a0 < NN; a0++) {
-            for (a1 = 1; a1 < a0; a1++) {
-              for (a2 = 0; a2 < a1; a2++) {
+    case 4:/*{{{*/
+      {
+        int a0, a1, a2, a3;
+        for (a0 = 3; a0 < NN; a0++) {
+          for (a1 = 2; a1 < a0; a1++) {
+            for (a2 = 1; a2 < a1; a2++) {
+              for (a3 = 0; a3 < a2; a3++) {
                 int U;
-                U = fposs[a0] | fposs[a1] | fposs[a2];
-                if (count_bits(U) == 3) {
+                U = fposs[a0] | fposs[a1] | fposs[a2] | fposs[a3];
+                if (count_bits(U) == 4) {
                   if (!score) {
-                    int matching_cells = (1 << cmap[a0]) | (1 << cmap[a1]) | (1 << cmap[a2]);
-                    if (do_ext_remove(gi, lay, ws, 3, U, matching_cells)) 
+                    int matching_cells = (1 << cmap[a0]) | (1 << cmap[a1]) | (1 << cmap[a2]) | (1 << cmap[a3]);
+                    if (do_ext_remove(gi, lay, ws, 4, U, matching_cells)) 
                       return 1;
                   }
                 }
-                U = rposs[a0] | rposs[a1] | rposs[a2];
-                if (count_bits(U) == 3) {
+                U = rposs[a0] | rposs[a1] | rposs[a2] | rposs[a3];
+                if (count_bits(U) == 4) {
                   if (!score) {
-                    int matching_symbols = (1 << smap[a0]) | (1 << smap[a1]) | (1 << smap[a2]);
+                    int matching_symbols = (1 << smap[a0]) | (1 << smap[a1]) | (1 << smap[a2]) | (1 << smap[a3]);
                     /* Hit : interior split */
-                    if (do_int_remove(gi, lay, ws, 3, U, matching_symbols))
+                    if (do_int_remove(gi, lay, ws, 4, U, matching_symbols)) {
                       return 1;
+                    }
                   }
                 }
               }
             }
           }
-        } 
-        break;
+        }
+      } 
+      break;
 /*}}}*/
-      case 4:/*{{{*/
-        {
-          int a0, a1, a2, a3;
-          for (a0 = 3; a0 < NN; a0++) {
-            for (a1 = 2; a1 < a0; a1++) {
-              for (a2 = 1; a2 < a1; a2++) {
-                for (a3 = 0; a3 < a2; a3++) {
+    case 5:/*{{{*/
+      {
+        int a0, a1, a2, a3, a4;
+        for (a0 = 4; a0 < NN; a0++) {
+          for (a1 = 3; a1 < a0; a1++) {
+            for (a2 = 2; a2 < a1; a2++) {
+              for (a3 = 1; a3 < a2; a3++) {
+                for (a4 = 0; a4 < a3; a4++) {
                   int U;
-                  U = fposs[a0] | fposs[a1] | fposs[a2] | fposs[a3];
-                  if (count_bits(U) == 4) {
+                  U = fposs[a0] | fposs[a1] | fposs[a2] | fposs[a3] | fposs[a4];
+                  if (count_bits(U) == 5) {
                     if (!score) {
-                      int matching_cells = (1 << cmap[a0]) | (1 << cmap[a1]) | (1 << cmap[a2]) | (1 << cmap[a3]);
-                      if (do_ext_remove(gi, lay, ws, 4, U, matching_cells)) 
+                      int matching_cells = (1 << cmap[a0]) | (1 << cmap[a1]) | (1 << cmap[a2]) | (1 << cmap[a3]) | (1 << cmap[a4]);
+                      if (do_ext_remove(gi, lay, ws, 5, U, matching_cells)) 
                         return 1;
                     }
                   }
-                  U = rposs[a0] | rposs[a1] | rposs[a2] | rposs[a3];
-                  if (count_bits(U) == 4) {
+                  U = rposs[a0] | rposs[a1] | rposs[a2] | rposs[a3] | rposs[a4];
+                  if (count_bits(U) == 5) {
                     if (!score) {
-                      int matching_symbols = (1 << smap[a0]) | (1 << smap[a1]) | (1 << smap[a2]) | (1 << smap[a3]);
+                      int matching_symbols = (1 << smap[a0]) | (1 << smap[a1]) | (1 << smap[a2]) | (1 << smap[a3]) | (1 << smap[a4]);
                       /* Hit : interior split */
-                      if (do_int_remove(gi, lay, ws, 4, U, matching_symbols)) {
+                      if (do_int_remove(gi, lay, ws, 5, U, matching_symbols)) {
                         return 1;
                       }
                     }
@@ -766,12 +801,13 @@ static int try_partition(int gi, struct layout *lay, struct ws *ws, int opt, str
               }
             }
           }
-        } 
-        break;
+        }
+      } 
+      break;
 /*}}}*/
-      default:
-        fprintf(stderr, "Not handled yet\n");
-    }
+    default:
+      /* Until we get the capability to do bigger partitions... */
+      return 0;
   }
   return 0;
 }
@@ -1208,9 +1244,7 @@ static int inner_infer(struct layout *lay, struct ws *ws)/*{{{*/
     if (lk) {
       int status;
 #if 0
-      if (lk->index == 12) {
-        fprintf(stderr, "Running %s on %d\n", q->name, lk->index);
-      }
+      fprintf(stderr, "Running %s on %d\n", q->name, lk->index);
 #endif
       status = (q->worker)(lk->index, lay, ws, q->opt, NULL);
 #if 0
@@ -1298,9 +1332,19 @@ int infer(struct layout *lay, int *state, int *order, int *score, int options)/*
   /* Set up work queues */
   {
     struct queue *next_run, *next_cell_push, *next_line_push, *next_block_push, *next_group_push;
+    int i;
+    char buffer[16];
     next_run = NULL;
     next_cell_push = NULL;
     next_group_push = NULL;
+
+    if (!(options & OPT_NO_SPLIT_EXT)) {
+      for (i=4; i>=2; i--) {
+        sprintf(buffer, "Partition %d", i);
+        struct queue *our_q = mk_queue(try_partition, next_run, next_group_push, i, buffer);
+        next_run = next_group_push = our_q;
+      }
+    }
 
 #if 0
     if (!(options & OPT_NO_SPLIT_INT)) {
@@ -1316,11 +1360,6 @@ int infer(struct layout *lay, int *state, int *order, int *score, int options)/*
       next_run = next_group_push = our_q;
     }
 #endif
-    
-    if (!(options & OPT_NO_SPLIT_EXT)) {
-      struct queue *our_q = mk_queue(try_partition, next_run, next_group_push, 0, "Partition");
-      next_run = next_group_push = our_q;
-    }
 
     if (!(options & OPT_NO_SUBSETS)) {
       struct queue *our_q = mk_queue(try_subsets, next_run, next_group_push, 0, "Subsets");
@@ -1390,7 +1429,7 @@ int infer(struct layout *lay, int *state, int *order, int *score, int options)/*
 
   free_ws(ws);
   return result;
-  
+
 }
 /*}}}*/
 
