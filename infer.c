@@ -1332,35 +1332,26 @@ int infer(struct layout *lay, int *state, int *order, int *score, int options)/*
   /* Set up work queues */
   {
     struct queue *next_run, *next_cell_push, *next_line_push, *next_block_push, *next_group_push;
-    int i;
-    char buffer[16];
     next_run = NULL;
     next_cell_push = NULL;
     next_group_push = NULL;
 
-    if (!(options & OPT_NO_SPLIT_EXT)) {
-      for (i=4; i>=2; i--) {
-        sprintf(buffer, "Partition %d", i);
-        struct queue *our_q = mk_queue(try_partition, next_run, next_group_push, i, buffer);
-        next_run = next_group_push = our_q;
-      }
-    }
-
-#if 0
-    if (!(options & OPT_NO_SPLIT_INT)) {
-      struct queue *our_q = mk_queue(try_split_internal, next_run, next_group_push, 0, "Interior");
+    if (!(options & OPT_NO_PART_5)) {
+      struct queue *our_q = mk_queue(try_partition, next_run, next_group_push, 5, "Partition 5");
       next_run = next_group_push = our_q;
     }
-    if (!(options & OPT_NO_SPLIT_EXTX)) {
-      struct queue *our_q = mk_queue(try_split_external, next_run, next_group_push, 1, "Exterior_X");
+    if (!(options & OPT_NO_PART_4)) {
+      struct queue *our_q = mk_queue(try_partition, next_run, next_group_push, 4, "Partition 4");
       next_run = next_group_push = our_q;
     }
-    if (!(options & OPT_NO_SPLIT_EXT)) {
-      struct queue *our_q = mk_queue(try_split_external, next_run, next_group_push, 0, "Exterior");
+    if (!(options & OPT_NO_PART_3)) {
+      struct queue *our_q = mk_queue(try_partition, next_run, next_group_push, 3, "Partition 3");
       next_run = next_group_push = our_q;
     }
-#endif
-
+    if (!(options & OPT_NO_PART_2)) {
+      struct queue *our_q = mk_queue(try_partition, next_run, next_group_push, 2, "Partition 2");
+      next_run = next_group_push = our_q;
+    }
     if (!(options & OPT_NO_SUBSETS)) {
       struct queue *our_q = mk_queue(try_subsets, next_run, next_group_push, 0, "Subsets");
       next_run = next_group_push = our_q;

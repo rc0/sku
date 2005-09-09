@@ -131,12 +131,20 @@ struct super_layout {
 #define OPT_NO_LINES     (1<<16)
 #define OPT_NO_SUBSETS   (1<<17)
 #define OPT_NO_ONLYOPT   (1<<18)
-#define OPT_NO_SPLIT_INT (1<<19)
-#define OPT_NO_SPLIT_EXT (1<<20)
-#define OPT_NO_SPLIT_EXTX (1<<21)
 
-#define OPT_IMPLY_NO_LINES (OPT_NO_SUBSETS | OPT_NO_SPLIT_EXT | OPT_NO_SPLIT_INT | OPT_NO_SPLIT_EXTX)
-#define OPT_MAKE_EASIER (OPT_NO_LINES | OPT_NO_SUBSETS | OPT_NO_ONLYOPT | OPT_NO_SPLIT_INT | OPT_NO_SPLIT_EXT | OPT_NO_SPLIT_EXTX)
+#define OPT_NO_PART_2    (1<<19)
+#define OPT_NO_PART_3    (1<<20)
+#define OPT_NO_PART_4    (1<<21)
+#define OPT_NO_PART_5    (1<<22)
+
+#define OPT_NO_PART    (OPT_NO_PART_2 | OPT_NO_PART_3 | OPT_NO_PART_4 | OPT_NO_PART_5)
+#define OPT_NO_PART_2E (OPT_NO_PART_2 | OPT_NO_PART_3 | OPT_NO_PART_4 | OPT_NO_PART_5)
+#define OPT_NO_PART_3E (OPT_NO_PART_3 | OPT_NO_PART_4 | OPT_NO_PART_5)
+#define OPT_NO_PART_4E (OPT_NO_PART_4 | OPT_NO_PART_5)
+#define OPT_NO_PART_5E (OPT_NO_PART_5)
+
+#define OPT_IMPLY_NO_LINES (OPT_NO_SUBSETS | OPT_NO_PART)
+#define OPT_MAKE_EASIER (OPT_NO_LINES | OPT_NO_SUBSETS | OPT_NO_ONLYOPT | OPT_NO_PART)
 
 /* ============================================================================ */
 
@@ -193,7 +201,7 @@ extern void mark_cells(int grey_cells, int options);
 extern void grade(int options);
 extern void grade_find_sol_reqs(struct layout *lay, int *state, int options, char *result, char *min_result);
 
-#define N_SOLVE_OPTIONS 6
+#define N_SOLVE_OPTIONS 7
 struct solve_option {
   int opt_flag;
   const char *name;

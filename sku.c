@@ -67,6 +67,7 @@ static void usage(void)
 
 /* ============================================================================ */
 
+#if 0
 static void apply_level(const char *level, int *options, int *reduce_req_n)/*{{{*/
 {
   int lo, hi;
@@ -113,6 +114,7 @@ static void apply_level(const char *level, int *options, int *reduce_req_n)/*{{{
 
 }
 /*}}}*/
+#endif
 
 /* ============================================================================ */
 
@@ -160,12 +162,13 @@ int main (int argc, char **argv)/*{{{*/
         const char *p = 2 + *argv;
         while (*p) {
           switch (*p) {
-            case 'e': options |= OPT_NO_SPLIT_EXT;  break;
-            case 'E': options |= OPT_NO_SPLIT_EXTX;  break;
-            case 'i': options |= OPT_NO_SPLIT_INT;    break;
             case 'l': options |= OPT_NO_LINES;   break;
             case 'o': options |= OPT_NO_ONLYOPT; break;
             case 's': options |= OPT_NO_SUBSETS; break;
+            case '2': options |= OPT_NO_PART_2E; break;
+            case '3': options |= OPT_NO_PART_3E; break;
+            case '4': options |= OPT_NO_PART_4E; break;
+            case '5': options |= OPT_NO_PART_5E; break;
             default: fprintf(stderr, "Can't use %c with -E\n", *p);
               break;
           }
@@ -187,8 +190,10 @@ int main (int argc, char **argv)/*{{{*/
       } else {
         grey_cells = atoi(*argv + 2);
       }
+#if 0
     } else if (!strncmp(*argv, "-L", 2)) {
       apply_level(*argv + 2, &options, &reduce_req_n);
+#endif
     } else if (!strncmp(*argv, "-m", 2)) {
       iters_for_min = atoi(*argv + 2);
     } else if (!strcmp(*argv, "-M")) {
@@ -204,12 +209,13 @@ int main (int argc, char **argv)/*{{{*/
         const char *p = 2 + *argv;
         while (*p) {
           switch (*p) {
-            case 'e': reduce_req_n |= OPT_NO_SPLIT_EXT;  break;
-            case 'E': reduce_req_n |= OPT_NO_SPLIT_EXTX;  break;
-            case 'i': reduce_req_n |= OPT_NO_SPLIT_INT;    break;
             case 'l': reduce_req_n |= OPT_NO_LINES;   break;
             case 'o': reduce_req_n |= OPT_NO_ONLYOPT; break;
             case 's': reduce_req_n |= OPT_NO_SUBSETS; break;
+            case '2': reduce_req_n |= OPT_NO_PART_2; break;
+            case '3': reduce_req_n |= OPT_NO_PART_3; break;
+            case '4': reduce_req_n |= OPT_NO_PART_4; break;
+            case '5': reduce_req_n |= OPT_NO_PART_5; break;
             default: fprintf(stderr, "Can't use %c with -R\n", *p);
               break;
           }
@@ -238,9 +244,6 @@ int main (int argc, char **argv)/*{{{*/
     }
   }
 
-  if (options & OPT_NO_SPLIT_EXT) options |= OPT_NO_SPLIT_EXTX;
-  if (reduce_req_n & OPT_NO_SPLIT_EXT) options |= OPT_NO_SPLIT_EXTX;
-
   if (options & OPT_NO_LINES) {
     options |= OPT_IMPLY_NO_LINES;
   }
@@ -250,7 +253,7 @@ int main (int argc, char **argv)/*{{{*/
    * the harder rules are being omitted, that is.) */
   if ((options & OPT_IMPLY_NO_LINES) != OPT_IMPLY_NO_LINES) {
     if (reduce_req_n & OPT_NO_LINES) {
-      fprintf(stderr, "WARNING: ignoring -Rl (no -Eeis)\n");
+      fprintf(stderr, "WARNING: ignoring -Rl (no -Es2)\n");
       reduce_req_n &= ~OPT_NO_LINES;
     }
   }
@@ -296,7 +299,10 @@ int main (int argc, char **argv)/*{{{*/
       format_output(options);
       break;
     case OP_TIDY:
+      fprintf(stderr, "Tidy is missing\n");
+#if 0
       tidy(options);
+#endif
       break;
   }
   return 0;

@@ -28,9 +28,10 @@ const struct solve_option solve_options[N_SOLVE_OPTIONS] = {/*{{{*/
   { OPT_NO_LINES,     "Lines" },
   { OPT_NO_SUBSETS,   "Subsets" },
   { OPT_NO_ONLYOPT,   "Only option" },
-  { OPT_NO_SPLIT_EXT, "Split (exterior)" },
-  { OPT_NO_SPLIT_EXTX, "Split (exterior_x)" },
-  { OPT_NO_SPLIT_INT, "Split (interior)" }
+  { OPT_NO_PART_2,    "Partition 2" },
+  { OPT_NO_PART_3,    "Partition 3" },
+  { OPT_NO_PART_4,    "Partition 4" },
+  { OPT_NO_PART_5,    "Partition 5" }
 };
 /*}}}*/
 void grade_find_sol_reqs(struct layout *lay, int *state, int options, char *result, char *min_result)/*{{{*/
