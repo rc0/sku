@@ -1308,7 +1308,11 @@ get_out:
   
 }
 /*}}}*/
-int infer(struct layout *lay, int *state, int *order, int *score, int options)/*{{{*/
+/*{{{ infer() */
+int infer(struct layout *lay,
+    int *state, int *order,
+    int *score,
+    const struct constraint *simplify_cons, int options)
 {
   int nc, ng, ns;
   struct ws *ws;
@@ -1336,28 +1340,28 @@ int infer(struct layout *lay, int *state, int *order, int *score, int options)/*
     next_cell_push = NULL;
     next_group_push = NULL;
 
-    if (!(options & OPT_NO_PART_5)) {
+    if (simplify_cons->max_partition_size >= 5) {
       struct queue *our_q = mk_queue(try_partition, next_run, next_group_push, 5, "Partition 5");
       next_run = next_group_push = our_q;
     }
-    if (!(options & OPT_NO_PART_4)) {
+    if (simplify_cons->max_partition_size >= 4) {
       struct queue *our_q = mk_queue(try_partition, next_run, next_group_push, 4, "Partition 4");
       next_run = next_group_push = our_q;
     }
-    if (!(options & OPT_NO_PART_3)) {
+    if (simplify_cons->max_partition_size >= 3) {
       struct queue *our_q = mk_queue(try_partition, next_run, next_group_push, 3, "Partition 3");
       next_run = next_group_push = our_q;
     }
-    if (!(options & OPT_NO_PART_2)) {
+    if (simplify_cons->max_partition_size >= 2) {
       struct queue *our_q = mk_queue(try_partition, next_run, next_group_push, 2, "Partition 2");
       next_run = next_group_push = our_q;
     }
-    if (!(options & OPT_NO_SUBSETS)) {
+    if (simplify_cons->do_subsets) {
       struct queue *our_q = mk_queue(try_subsets, next_run, next_group_push, 0, "Subsets");
       next_run = next_group_push = our_q;
     }
     if (!(options & OPT_ONLYOPT_FIRST)) {
-      if (!(options & OPT_NO_ONLYOPT)) {
+      if (simplify_cons->do_onlyopt) {
         struct queue *our_q = mk_queue(try_onlyopt, next_run, next_cell_push, 0, "Onlyopt");
         next_run = next_cell_push = our_q;
       }
@@ -1368,7 +1372,7 @@ int infer(struct layout *lay, int *state, int *order, int *score, int options)/*
     next_block_push = next_group_push;
     next_line_push  = next_group_push;
 
-    if (!(options & OPT_NO_LINES)) {
+    if (simplify_cons->do_lines) {
       struct queue *our_q = mk_queue(try_group_allocate, next_run, next_line_push, 0, "Lines");
       next_run = next_line_push = our_q;
     }
@@ -1378,7 +1382,7 @@ int infer(struct layout *lay, int *state, int *order, int *score, int options)/*
     }
 
     if (options & OPT_ONLYOPT_FIRST) {
-      if (!(options & OPT_NO_ONLYOPT)) {
+      if (simplify_cons->do_onlyopt) {
         struct queue *our_q = mk_queue(try_onlyopt, next_run, next_cell_push, 0, "Onlyopt");
         next_run = next_cell_push = our_q;
       }

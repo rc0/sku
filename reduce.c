@@ -32,14 +32,16 @@ static void inner_reduce_symmetrify_blanks(struct layout *lay, int *state, int o
   }
 }
 /*}}}*/
-static int inner_reduce_check_solvable(struct layout *lay, int *state, int options)/*{{{*/
+/*{{{ inner_reduce_check_solvable() */
+static int inner_reduce_check_solvable(struct layout *lay,
+    int *state, const struct constraint *simplify_cons, int options)
 {
   int *copy;
   int n_solutions, result;
   copy = new_array(int, lay->nc);
   memcpy(copy, state, lay->nc * sizeof(int));
   setup_terminals(lay);
-  n_solutions = infer(lay, copy, NULL, NULL, OPT_STOP_ON_2 | (options & OPT_SPECULATE));
+  n_solutions = infer(lay, copy, NULL, NULL, simplify_cons, OPT_STOP_ON_2 | (options & OPT_SPECULATE));
   if (n_solutions == 1) {
     result = 1;
   } else {
@@ -74,7 +76,74 @@ static int trivial_p(struct layout *lay, int *state)/*{{{*/
   return 0;
 }
 /*}}}*/
-int inner_reduce(struct layout *lay, int *state, int options)/*{{{*/
+/*{{{ puzzle_meets_requirements_p() */
+static int puzzle_meets_requirements_p(struct layout *lay, int *state,
+    const struct constraint *simplify_cons,
+    const struct constraint *required_cons,
+    int options)
+{
+  int *copy;
+  int result;
+  struct constraint temp_cons;
+  int n_sol;
+
+  copy = new_array(int, lay->nc);
+  result = 1;
+
+  if (required_cons->do_subsets) {/*{{{*/
+    temp_cons = *simplify_cons;
+    temp_cons.do_subsets = 0;
+    memcpy(copy, state, lay->nc * sizeof(int));
+    n_sol = infer(lay, copy, NULL, NULL, &temp_cons, options);
+    if (n_sol == 1) {
+      result = 0;
+      goto get_out;
+    }
+  }
+/*}}}*/
+  if (required_cons->do_onlyopt) {/*{{{*/
+    temp_cons = *simplify_cons;
+    temp_cons.do_onlyopt = 0;
+    memcpy(copy, state, lay->nc * sizeof(int));
+    n_sol = infer(lay, copy, NULL, NULL, &temp_cons, options);
+    if (n_sol == 1) {
+      result = 0;
+      goto get_out;
+    }
+  }
+/*}}}*/
+  if (required_cons->do_lines) {/*{{{*/
+    temp_cons = *simplify_cons;
+    temp_cons.do_lines = 0;
+    memcpy(copy, state, lay->nc * sizeof(int));
+    n_sol = infer(lay, copy, NULL, NULL, &temp_cons, options);
+    if (n_sol == 1) {
+      result = 0;
+      goto get_out;
+    }
+  }
+/*}}}*/
+  if (required_cons->max_partition_size) {/*{{{*/
+    temp_cons = *simplify_cons;
+    temp_cons.max_partition_size = 
+      (required_cons->max_partition_size == 2) ? 0 : (required_cons->max_partition_size - 1);
+    memcpy(copy, state, lay->nc * sizeof(int));
+    n_sol = infer(lay, copy, NULL, NULL, &temp_cons, options);
+    if (n_sol == 1) {
+      result = 0;
+      goto get_out;
+    }
+  }
+/*}}}*/
+
+get_out:
+  free(copy);
+  return result;
+
+}
+/*}}}*/
+
+int inner_reduce(struct layout *lay, int *state, const struct constraint *simplify_cons, int options)/*{{{*/
 {
   int *copy, *answer;
   int *keep;
@@ -85,7 +154,7 @@ int inner_reduce(struct layout *lay, int *state, int options)/*{{{*/
   int is_trivial;
 
   inner_reduce_symmetrify_blanks(lay, state, options);
-  if (!inner_reduce_check_solvable(lay, state, options)) {
+  if (!inner_reduce_check_solvable(lay, state, simplify_cons, options)) {
     fprintf(stderr, "Cannot reduce the puzzle, it doesn't have a unique solution\n");
   }
 
@@ -128,10 +197,10 @@ int inner_reduce(struct layout *lay, int *state, int options)/*{{{*/
 
         if (options & OPT_SPECULATE) {
           setup_terminals(lay);
-          n_sol = infer(lay, copy, NULL, NULL, OPT_SPECULATE);
+          n_sol = infer(lay, copy, NULL, NULL, simplify_cons, OPT_SPECULATE);
         } else {
           setup_terminals(lay);
-          n_sol = infer(lay, copy, NULL, NULL, (options & OPT_MAKE_EASIER) | OPT_STOP_ON_2);
+          n_sol = infer(lay, copy, NULL, NULL, simplify_cons, OPT_STOP_ON_2);
         }
         tally--;
         if (n_sol == 1) {
@@ -185,56 +254,50 @@ int inner_reduce(struct layout *lay, int *state, int options)/*{{{*/
 }
 /*}}}*/
 
-void reduce(int iters_for_min, int options, int req_n)/*{{{*/
+/*{{{ reduce() */
+void reduce(int iters_for_min,
+    const struct constraint *simplify_cons, const struct constraint *required_cons,
+    int options)
 {
   int *state;
   int *result;
   int kept_givens = 0;
   struct layout *lay;
 
+  /* Sanity checks. */
+  if ((required_cons->max_partition_size > simplify_cons->max_partition_size) ||
+      (required_cons->do_subsets && !simplify_cons->do_subsets) ||
+      (required_cons->do_onlyopt && !simplify_cons->do_onlyopt) ||
+      (required_cons->do_lines && !simplify_cons->do_lines)) {
+    fprintf(stderr, "-E options remove rules required by -R options\nGiving up\n");
+    exit(1);
+  }
+    
   read_grid(&lay, &state, options);
   result = new_array(int, lay->nc);
 
-  if (req_n) {
+  if (!required_cons->is_default) {
     int *copy, *copy2;
-    char *grade_req, *min_grade_req;
-    int i;
-    int limit;
     int found;
-    int mask;
 
     found = 0;
     copy = new_array(int, lay->nc);
     copy2 = new_array(int, lay->nc);
-    limit = 1 << N_SOLVE_OPTIONS;
-    grade_req = new_array(char, limit);
-    min_grade_req = new_array(char, limit);
-    mask = 0;
-    for (i=0; i<N_SOLVE_OPTIONS; i++) {
-      if (req_n & solve_options[i].opt_flag) {
-        mask |= (1<<i);
-      }
-    }
     do {
       memcpy(copy, state, lay->nc * sizeof(int));
-      kept_givens = inner_reduce(lay, copy, (options & ~OPT_VERBOSE));
-      found = 1;
+      kept_givens = inner_reduce(lay, copy, simplify_cons, (options & ~OPT_VERBOSE));
+      found = 0;
       memcpy(copy2, copy, lay->nc * sizeof(int));
-      grade_find_sol_reqs(lay, copy2, options & ~OPT_VERBOSE, grade_req, min_grade_req);
-      for (i=0; i<limit; i++) {
-        if (grade_req[i]) {
-          if (i & mask) {
-            found = 0;
-            break;
-          }
-        }
+
+      if (puzzle_meets_requirements_p(lay, copy2, simplify_cons, required_cons, options & ~OPT_VERBOSE)) {
+        found = 1;
       }
     } while (!found);
     display(stdout, lay, copy);
     free(copy2);
     free(copy);
   } else if (iters_for_min == 0) {
-    kept_givens = inner_reduce(lay, state, options);
+    kept_givens = inner_reduce(lay, state, simplify_cons, options);
 
     if (options & OPT_VERBOSE) {
       fprintf(stderr, "%d givens kept\n", kept_givens);
@@ -248,7 +311,7 @@ void reduce(int iters_for_min, int options, int req_n)/*{{{*/
     copy = new_array(int, lay->nc);
     for (i=0; i<iters_for_min; i++) {
       memcpy(copy, state, lay->nc * sizeof(int));
-      kept_givens = inner_reduce(lay, copy, (options & ~OPT_VERBOSE));
+      kept_givens = inner_reduce(lay, copy, simplify_cons, (options & ~OPT_VERBOSE));
       if (kept_givens < min_givens) {
         min_givens = kept_givens;
         if (options & OPT_VERBOSE) {

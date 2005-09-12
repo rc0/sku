@@ -23,6 +23,7 @@
 
 /* ============================================================================ */
 
+
 static void usage(void)
 {
   fprintf(stderr,
@@ -121,7 +122,6 @@ static void apply_level(const char *level, int *options, int *reduce_req_n)/*{{{
 int main (int argc, char **argv)/*{{{*/
 {
   int options;
-  int reduce_req_n;
   int seed;
   int iters_for_min = 0;
   int grey_cells = 0;
@@ -138,11 +138,13 @@ int main (int argc, char **argv)/*{{{*/
     OP_TIDY
   } operation;
   char *layout_name = NULL;
+  struct constraint simplify_cons, required_cons;
   
   operation = OP_SOLVE;
 
   options = 0;
-  reduce_req_n = 0;
+  required_cons = cons_none;
+  simplify_cons = cons_all;
 
   while (++argv, --argc) {
     if (!strcmp(*argv, "-h") || !strcmp(*argv, "-help") || !strcmp(*argv, "--help")) {
@@ -157,18 +159,20 @@ int main (int argc, char **argv)/*{{{*/
       layout_name = *argv + 2;
     } else if (!strncmp(*argv, "-E", 2)) {
       if ((*argv)[2] == 0) {
-        options |= OPT_MAKE_EASIER;
+        simplify_cons = cons_none;
+        simplify_cons.is_default = 0;
       } else {
         const char *p = 2 + *argv;
+        simplify_cons.is_default = 0;
         while (*p) {
           switch (*p) {
-            case 'l': options |= OPT_NO_LINES;   break;
-            case 'o': options |= OPT_NO_ONLYOPT; break;
-            case 's': options |= OPT_NO_SUBSETS; break;
-            case '2': options |= OPT_NO_PART_2E; break;
-            case '3': options |= OPT_NO_PART_3E; break;
-            case '4': options |= OPT_NO_PART_4E; break;
-            case '5': options |= OPT_NO_PART_5E; break;
+            case 'l': simplify_cons.do_lines = 0; break;
+            case 'o': simplify_cons.do_onlyopt = 0; break;
+            case 's': simplify_cons.do_subsets = 0; break;
+            case '2': simplify_cons.max_partition_size = 0; break;
+            case '3': simplify_cons.max_partition_size = 2; break;
+            case '4': simplify_cons.max_partition_size = 3; break;
+            case '5': simplify_cons.max_partition_size = 4; break;
             default: fprintf(stderr, "Can't use %c with -E\n", *p);
               break;
           }
@@ -204,18 +208,20 @@ int main (int argc, char **argv)/*{{{*/
       operation = OP_REDUCE;
     } else if (!strncmp(*argv, "-R", 2)) {
       if ((*argv)[2] == 0) {
-        reduce_req_n = OPT_MAKE_EASIER;
+        required_cons = cons_all;
+        required_cons.is_default = 0;
       } else {
         const char *p = 2 + *argv;
+        required_cons.is_default = 0;
         while (*p) {
           switch (*p) {
-            case 'l': reduce_req_n |= OPT_NO_LINES;   break;
-            case 'o': reduce_req_n |= OPT_NO_ONLYOPT; break;
-            case 's': reduce_req_n |= OPT_NO_SUBSETS; break;
-            case '2': reduce_req_n |= OPT_NO_PART_2; break;
-            case '3': reduce_req_n |= OPT_NO_PART_3; break;
-            case '4': reduce_req_n |= OPT_NO_PART_4; break;
-            case '5': reduce_req_n |= OPT_NO_PART_5; break;
+            case 'l': required_cons.do_lines = 1; break;
+            case 'o': required_cons.do_onlyopt = 1; break;
+            case 's': required_cons.do_subsets = 1; break;
+            case '2': required_cons.max_partition_size = 2; break;
+            case '3': required_cons.max_partition_size = 3; break;
+            case '4': required_cons.max_partition_size = 4; break;
+            case '5': required_cons.max_partition_size = 5; break;
             default: fprintf(stderr, "Can't use %c with -R\n", *p);
               break;
           }
@@ -243,25 +249,6 @@ int main (int argc, char **argv)/*{{{*/
       exit(1);
     }
   }
-
-  if (options & OPT_NO_LINES) {
-    options |= OPT_IMPLY_NO_LINES;
-  }
-  
-  /* There is pretty much no way to force a puzzle that requires the line rule
-   * to solve it - one of the harder rules will always do instead.  (Unless all
-   * the harder rules are being omitted, that is.) */
-  if ((options & OPT_IMPLY_NO_LINES) != OPT_IMPLY_NO_LINES) {
-    if (reduce_req_n & OPT_NO_LINES) {
-      fprintf(stderr, "WARNING: ignoring -Rl (no -Es2)\n");
-      reduce_req_n &= ~OPT_NO_LINES;
-    }
-  }
-
-  if (options & reduce_req_n) {
-    fprintf(stderr, "You cannot exclude methods and require them too!\n");
-    exit(1);
-  }
   
   seed = time(NULL) ^ getpid();
   if (options & OPT_VERBOSE) {
@@ -270,16 +257,16 @@ int main (int argc, char **argv)/*{{{*/
   srand48(seed);
   switch (operation) {
     case OP_SOLVE:
-      solve(options);
+      solve(&simplify_cons, options);
       break;
     case OP_HINT:
-      solve(options | OPT_HINT | OPT_VERBOSE);
+      solve(&simplify_cons, options | OPT_HINT | OPT_VERBOSE);
       break;
     case OP_ANY:
       solve_any(options);
       break;
     case OP_REDUCE:
-      reduce(iters_for_min, options, reduce_req_n);
+      reduce(iters_for_min, &simplify_cons, &required_cons, options);
       break;
     case OP_BLANK:
       {
@@ -293,7 +280,7 @@ int main (int argc, char **argv)/*{{{*/
       grade(options);
       break;
     case OP_MARK:
-      mark_cells(grey_cells, options);
+      mark_cells(grey_cells, &simplify_cons, options);
       break;
     case OP_FORMAT:
       format_output(options);

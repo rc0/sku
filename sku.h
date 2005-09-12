@@ -29,7 +29,7 @@
  * (namely, the ones in the overlapping blocks if diagonals mode is on.) */
 #define NDIM 8
 
-struct cell {
+struct cell {/*{{{*/
   char *name;           /* cell name for verbose + debug output. */
   int index;            /* self-index (to track reordering during geographical sort.) */
   int is_overlap;
@@ -39,18 +39,19 @@ struct cell {
   short isym;           /* index of next cell in same symmetry group (circular ring) */
   short group[NDIM];    /* table of groups the cell is in (-1 for unused dimensions) */
 };
+/*}}}*/
 
 #define SYM(x) (lay->cells[(x)].isym)
 
-struct dline
+struct dline/*{{{*/
 {
   /* Start and end of a line for formatted output. */
   short x0, y0;
   short x1, y1;
 };
-
-/* examples are for the regular 9x9 puzzle. */
-struct layout {
+/*}}}*/
+struct layout {/*{{{*/
+  /* examples are for the regular 9x9 puzzle. */
   char *name;           /* tag for writing in header card */
   int ns;               /* number of symbols, e.g. 9 (=groupsize)*/
   int nc;               /* number of cells, e.g. 81 */
@@ -72,28 +73,43 @@ struct layout {
   short *groups;        /* [ng*ns] table of cell indices in each of the groups */
   char **group_names;    /* [ng] array of strings. */
 };
-
-struct subgrid {
+/*}}}*/
+struct subgrid {/*{{{*/
   int yoff;
   int xoff;
   char *name;
 };
+/*}}}*/
 
 enum corner {NW, NE, SE, SW};
 
-struct subgrid_link {
+struct subgrid_link {/*{{{*/
   int index0;
   enum corner corner0;
   int index1;
   enum corner corner1;
 };
-
-struct super_layout {
+/*}}}*/
+struct super_layout {/*{{{*/
   int n_subgrids;
   struct subgrid *subgrids;
   int n_links;
   struct subgrid_link *links;
 };
+/*}}}*/
+
+/* ============================================================================ */
+struct constraint {/*{{{*/
+  int do_lines;
+  int do_subsets;
+  int do_onlyopt;
+  int max_partition_size;
+  int is_default;
+};
+/*}}}*/
+
+#define MAX_PARTITION_SIZE 5
+const extern struct constraint cons_all, cons_none;
 
 /* ============================================================================ */
 
@@ -128,24 +144,6 @@ struct super_layout {
 #define OPT_SOLVE_MARKED (1<<13)
 #define OPT_SOLVE_MINIMAL (1<<14)
 
-#define OPT_NO_LINES     (1<<16)
-#define OPT_NO_SUBSETS   (1<<17)
-#define OPT_NO_ONLYOPT   (1<<18)
-
-#define OPT_NO_PART_2    (1<<19)
-#define OPT_NO_PART_3    (1<<20)
-#define OPT_NO_PART_4    (1<<21)
-#define OPT_NO_PART_5    (1<<22)
-
-#define OPT_NO_PART    (OPT_NO_PART_2 | OPT_NO_PART_3 | OPT_NO_PART_4 | OPT_NO_PART_5)
-#define OPT_NO_PART_2E (OPT_NO_PART_2 | OPT_NO_PART_3 | OPT_NO_PART_4 | OPT_NO_PART_5)
-#define OPT_NO_PART_3E (OPT_NO_PART_3 | OPT_NO_PART_4 | OPT_NO_PART_5)
-#define OPT_NO_PART_4E (OPT_NO_PART_4 | OPT_NO_PART_5)
-#define OPT_NO_PART_5E (OPT_NO_PART_5)
-
-#define OPT_IMPLY_NO_LINES (OPT_NO_SUBSETS | OPT_NO_PART)
-#define OPT_MAKE_EASIER (OPT_NO_LINES | OPT_NO_SUBSETS | OPT_NO_ONLYOPT | OPT_NO_PART)
-
 /* ============================================================================ */
 
 /* In util.c */
@@ -156,7 +154,7 @@ extern void show_symbols_in_set(int ns, const char *symbols, int bitmap);
 extern void setup_terminals(struct layout *lay);
 
 /* In infer.c */
-int infer(struct layout *lay, int *state, int *order, int *score, int options);
+int infer(struct layout *lay, int *state, int *order, int *score, const struct constraint *cons, int options);
 
 /* In superlayout.c */
 extern void superlayout_5(struct super_layout *superlay);
@@ -187,26 +185,22 @@ extern void blank(struct layout *lay);
 void display(FILE *out, struct layout *lay, int *state);
 
 /* In solve.c */
-extern void solve(int options);
+extern void solve(const struct constraint *simplify_cons, int options);
 extern void solve_any(int options);
 
 /* In reduce.c */
-extern int inner_reduce(struct layout *lay, int *state, int options);
-extern void reduce(int iters_for_min, int options, int req_n);
+extern int inner_reduce(struct layout *lay, int *state, const struct constraint *simplify_cons, int options);
+extern void reduce(int iters_for_min,
+    const struct constraint *simplify_cons,
+    const struct constraint *required_cons, 
+    int options);
 
 /* In mark.c */
-extern void mark_cells(int grey_cells, int options);
+extern void mark_cells(int grey_cells, const struct constraint *simplify_cons, int options);
+
 
 /* In grade.c */
 extern void grade(int options);
-extern void grade_find_sol_reqs(struct layout *lay, int *state, int options, char *result, char *min_result);
-
-#define N_SOLVE_OPTIONS 7
-struct solve_option {
-  int opt_flag;
-  const char *name;
-};
-extern const struct solve_option solve_options[N_SOLVE_OPTIONS];
   
 /* In svg.c */
 extern void format_output(int options);

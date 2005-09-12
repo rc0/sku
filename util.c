@@ -79,3 +79,26 @@ void setup_terminals(struct layout *lay)/*{{{*/
   }
 }
 /*}}}*/
+
+/* ============================================================================ */
+
+const struct constraint cons_all = {/*{{{*/
+  .do_lines = 1,
+  .do_subsets = 1,
+  .do_onlyopt = 1,
+  .max_partition_size = MAX_PARTITION_SIZE,
+  .is_default = 1
+};
+/*}}}*/
+const struct constraint cons_none = {/*{{{*/
+  .do_lines = 0,
+  .do_subsets = 0,
+  .do_onlyopt = 0,
+  .max_partition_size = 0,
+  .is_default = 1
+};
+/*}}}*/
+
+/* ============================================================================ */
+
+

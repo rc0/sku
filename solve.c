@@ -32,7 +32,7 @@ static int count_marked_cells(struct layout *lay, int *state)/*{{{*/
   return result;
 }
 /*}}}*/
-void solve_minimal(struct layout *lay, int *state, int options)/*{{{*/
+void solve_minimal(struct layout *lay, int *state, const struct constraint *simplify_cons, int options)/*{{{*/
 {
   int n_solutions;
   int *copy, *copy0;
@@ -45,7 +45,7 @@ void solve_minimal(struct layout *lay, int *state, int options)/*{{{*/
   memset(barred, 0, lay->nc);
 
   memcpy(copy, state, lay->nc * sizeof(int));
-  n_solutions = infer(lay, copy, NULL, NULL, options);
+  n_solutions = infer(lay, copy, NULL, NULL, simplify_cons, options);
   if (n_solutions != 1) {
     fprintf(stderr, "Cannot produce minimal solution unless puzzle has a unique solution\n");
     goto get_out;
@@ -57,7 +57,7 @@ void solve_minimal(struct layout *lay, int *state, int options)/*{{{*/
     if (state[next_to_bar] == CELL_MARKED) continue;
     memcpy(copy, copy0, lay->nc * sizeof(int));
     copy[next_to_bar] = CELL_BARRED;
-    n_solutions = infer(lay, copy, NULL, NULL, options);
+    n_solutions = infer(lay, copy, NULL, NULL, simplify_cons, options);
     if (n_solutions == 1) {
       barred[next_to_bar] = 1;
       copy0[next_to_bar] = CELL_BARRED;
@@ -73,7 +73,7 @@ get_out:
   return;
 }
 /*}}}*/
-void solve(int options)/*{{{*/
+void solve(const struct constraint *simplify_cons, int options)/*{{{*/
 {
   int *state;
   int n_solutions;
@@ -91,13 +91,13 @@ void solve(int options)/*{{{*/
   setup_terminals(lay);
   if (options & OPT_SOLVE_MINIMAL) {
     if (n_marked) {
-      solve_minimal(lay, state, options);
+      solve_minimal(lay, state, simplify_cons, options);
     } else {
       fprintf(stderr, "-M specified but puzzle is not marked\n");
       exit(1);
     }
   } else {
-    n_solutions = infer(lay, state, NULL, NULL, options);
+    n_solutions = infer(lay, state, NULL, NULL, simplify_cons, options);
 
     if (n_solutions == 0) {
       fprintf(stderr, "The puzzle had no solutions.\n"
@@ -129,7 +129,7 @@ void solve_any(int options)/*{{{*/
 
   read_grid(&lay, &state, options);
   setup_terminals(lay);
-  n_solutions = infer(lay, state, NULL, NULL, OPT_SPECULATE | OPT_FIRST_ONLY | options);
+  n_solutions = infer(lay, state, NULL, NULL, &cons_all, OPT_SPECULATE | OPT_FIRST_ONLY | options);
 
   if (n_solutions == 0) {
     fprintf(stderr, "The puzzle had no solutions.\n"
