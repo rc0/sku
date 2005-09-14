@@ -39,15 +39,23 @@ static void format_emit_lines(int n, struct dline *d, double stroke_width)/*{{{*
   }
 }
 /*}}}*/
+static void emit_clusters(struct layout *lay, struct clusters *clus)/*{{{*/
+{
+
+
+
+}
+/*}}}*/
 void format_output(int options)/*{{{*/
 {
   int *state;
+  struct clusters *clus;
   double scale, offset;
   int i;
   struct layout *lay;
   char grey_sym = 'A';
 
-  read_grid(&lay, &state, options);
+  read_grid(&lay, &state, &clus, options);
 
   scale = 72.27 / 2.54;
   offset = 2.0 * scale;
@@ -95,6 +103,10 @@ void format_output(int options)/*{{{*/
     }
   }
 
+  if (lay->is_additive && clus) {
+    emit_clusters(lay, clus);
+  }
+
   format_emit_lines(lay->n_thinlines, lay->thinlines, 0.5);
   format_emit_lines(lay->n_mediumlines, lay->mediumlines, 1.5);
   format_emit_lines(lay->n_thicklines, lay->thicklines, 3.0);
@@ -113,6 +125,7 @@ void format_output(int options)/*{{{*/
   printf("</svg>\n");
 
   free(state);
+  if (clus) free_clusters(clus);
   free_layout(lay);
 }
 /*}}}*/

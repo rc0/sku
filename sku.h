@@ -58,6 +58,8 @@ struct layout {/*{{{*/
   int ng;               /* number of groups, e.g. 27 */
   int prows;            /* #rows for generating print grid */
   int pcols;            /* #cols for generating print grid */
+ 
+  int is_additive;      /* Layout supports additive constraints. */
   
   /* For generating the lines on the formatted output. */
   int n_thinlines;
@@ -113,6 +115,14 @@ const extern struct constraint cons_all, cons_none;
 
 /* ============================================================================ */
 
+struct clusters {/*{{{*/
+  unsigned char *cells;
+  short total[256];
+};
+/*}}}*/
+
+/* ============================================================================ */
+
 /* A regular empty cell, waiting to be solved */
 #define CELL_EMPTY -1
 /* The same, but the cell is 'greyed'.  (If the puzzle only requires a subset
@@ -152,6 +162,8 @@ extern int decode(unsigned int a);
 extern char *tobin(int n, int x);
 extern void show_symbols_in_set(int ns, const char *symbols, int bitmap);
 extern void setup_terminals(struct layout *lay);
+extern struct clusters *mk_clusters(int nc);
+extern void free_clusters(struct clusters *x);
 
 /* In infer.c */
 int infer(struct layout *lay, int *state, int *order, int *score, const struct constraint *cons, int options);
@@ -176,13 +188,13 @@ extern void debug_layout(struct layout *lay);
 extern struct layout *genlayout(const char *name, int options);
 
 /* In reader.c */
-extern void read_grid(struct layout **lay, int **state, int options);
+extern void read_grid(struct layout **lay, int **state, struct clusters **clus, int options);
 
 /* In blank.c */
 extern void blank(struct layout *lay);
 
 /* In display.c */
-void display(FILE *out, struct layout *lay, int *state);
+void display(FILE *out, struct layout *lay, int *state, struct clusters *clus);
 
 /* In solve.c */
 extern void solve(const struct constraint *simplify_cons, int options);

@@ -22,12 +22,19 @@
 void blank(struct layout *lay)/*{{{*/
 {
   int *state;
+  struct clusters *clus;
   int i;
   state = new_array(int, lay->nc);
   for (i=0; i<lay->nc; i++) {
     state[i] = -1;
   }
-  display(stdout, lay, state);
+  if (lay->is_additive) {
+    clus = mk_clusters(lay->nc);
+  } else {
+    clus = NULL;
+  }
+  display(stdout, lay, state, clus);
   free(state);
+  if (clus) free_clusters(clus);
 }
 /*}}}*/

@@ -19,7 +19,7 @@
 
 #include "sku.h"
 
-void display(FILE *out, struct layout *lay, int *state)/*{{{*/
+void display(FILE *out, struct layout *lay, int *state, struct clusters *clus)/*{{{*/
 {
   int mn, i, j;
   char *grid;
@@ -48,6 +48,32 @@ void display(FILE *out, struct layout *lay, int *state)/*{{{*/
     if (j == lay->pcols) {
       j = 0;
       fputc('\n', out);
+    }
+  }
+
+  if (lay->is_additive && (clus != NULL)) {
+    /* The caller may want not to display the cluster info */
+    memset(grid, ' ', mn);
+    for (i=0; i<lay->nc; i++) {
+      int row = lay->cells[i].prow;
+      int col = lay->cells[i].pcol;
+      int idx = row * lay->pcols + col;
+      grid[idx] = clus->cells[i];
+    }
+
+    fprintf(out, "\n");
+    for (i=0, j=0; i<mn; i++) {
+      fputc(grid[i], out);
+      j++;
+      if (j == lay->pcols) {
+        j = 0;
+        fputc('\n', out);
+      }
+    }
+    for (i=0; i<256; i++) {
+      if (clus->total[i] > 0) {
+        printf("%1c %d\n", i, clus->total[i]);
+      }
     }
   }
 

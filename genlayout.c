@@ -211,16 +211,24 @@ struct layout *genlayout(const char *name, int options)/*{{{*/
   const char *slash;
   int M, N;
   int x_layout;
+  int a_layout;   /* Additive layout */
   const char *name1;
 
   result = new(struct layout);
 
-  if (*name == 'x') {
+  name1 = name;
+  if (*name1 == 'a') {
+    a_layout = 1;
+    name1++;
+  } else {
+    a_layout = 0;
+  }
+
+  if (*name1 == 'x') {
     x_layout = 1;
-    name1 = name + 1;
+    name1++;
   } else {
     x_layout = 0;
-    name1 = name;
   }
   slash = strchr(name1, '/');
   if (slash) {
@@ -235,6 +243,7 @@ struct layout *genlayout(const char *name, int options)/*{{{*/
   } else {
     parse_mn(name1, strlen(name1), &M, &N);
     layout_MxN(M, N, x_layout, result, options);
+    result->is_additive = a_layout;
   }
   result->name = strdup(name);
   return result;

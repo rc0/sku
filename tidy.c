@@ -23,9 +23,11 @@ void tidy(int options)
 {
   int *state;
   struct layout *lay;
-  read_grid(&lay, &state, options);
-  display(stdout, lay, state);
+  struct clusters *clus;
+  read_grid(&lay, &state, &clus, options);
+  display(stdout, lay, state, clus);
   free(state);
+  if (clus) free_clusters(clus);
   free_layout(lay);
   return;
 }

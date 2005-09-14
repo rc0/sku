@@ -18,6 +18,7 @@
  */
 
 #include "sku.h"
+#include <ctype.h>
 
 static void chomp(char *x)/*{{{*/
 {
@@ -28,13 +29,14 @@ static void chomp(char *x)/*{{{*/
   }
 }
 /*}}}*/
-void read_grid(struct layout **lay, int **state, int options)/*{{{*/
+void read_grid(struct layout **lay, int **state, struct clusters **clus, int options)/*{{{*/
 {
   int rmap[256];
   int valid[256];
   int i, c;
   char buffer[256];
   struct layout *my_lay;
+  struct clusters *my_clus;
 
   fgets(buffer, sizeof(buffer), stdin);
   chomp(buffer);
@@ -45,7 +47,11 @@ void read_grid(struct layout **lay, int **state, int options)/*{{{*/
 
   my_lay = genlayout(buffer + 9, options);
   *state = new_array(int, my_lay->nc);
-  
+  if (my_lay->is_additive) {
+    my_clus = mk_clusters(my_lay->nc);
+  } else {
+    my_clus = NULL;
+  }
 
   for (i=0; i<256; i++) {
     rmap[i] = CELL_EMPTY;
@@ -73,6 +79,38 @@ void read_grid(struct layout **lay, int **state, int options)/*{{{*/
       }
     } while (!valid[c]);
   }
+
+  if (clus) {
+    char line[64];
+    for (i=0; i<my_lay->nc; i++) {
+      do {
+        c = getchar();
+        if (c == EOF) {
+          fprintf(stderr, "Ran out of input data!\n");
+          exit(1);
+        }
+        if (!isspace(c)) {
+          my_clus->cells[i] = (unsigned char) c;
+        }
+      } while (isspace(c));
+    }
+    do {
+      c = getchar();
+    } while (c != '\n');
+    while (fgets(line, sizeof(line), stdin)) {
+      char symbol;
+      int total;
+      chomp(line);
+      if (strlen(line) == 0) continue;
+      if (sscanf(line, "%c%d", &symbol, &total) != 2) {
+        fprintf(stderr, "Could not parse <%s>\n", line);
+        exit(1);
+      }
+      my_clus->total[(unsigned char)symbol] = total;
+    }
+  }
+  
   *lay = my_lay;
+  *clus = my_clus;
 }
 /*}}}*/

@@ -63,7 +63,7 @@ void solve_minimal(struct layout *lay, int *state, const struct constraint *simp
       copy0[next_to_bar] = CELL_BARRED;
     }
   }
-  display(stdout, lay, copy0);
+  display(stdout, lay, copy0, NULL);
   memcpy(state, copy0, lay->nc * sizeof(int));
 
 get_out:
@@ -77,10 +77,11 @@ void solve(const struct constraint *simplify_cons, int options)/*{{{*/
 {
   int *state;
   int n_solutions;
+  struct clusters *clus;
   struct layout *lay;
   int n_marked;
 
-  read_grid(&lay, &state, options);
+  read_grid(&lay, &state, &clus, options);
   n_marked = count_marked_cells(lay, state);
   if (n_marked > 0) {
     fprintf(stderr, "Found %d marked cell%s to solve for\n",
@@ -102,21 +103,22 @@ void solve(const struct constraint *simplify_cons, int options)/*{{{*/
     if (n_solutions == 0) {
       fprintf(stderr, "The puzzle had no solutions.\n"
           "Showing how far the solver got before becoming stuck.\n");
-      display(stdout, lay, state);
+      display(stdout, lay, state, clus);
     } else if (n_solutions == 1) {
       fprintf(stderr, "The puzzle had precisely 1 solution\n");
-      display(stdout, lay, state);
+      display(stdout, lay, state, clus);
     } else {
       if (options & OPT_SHOW_ALL) {
         fprintf(stderr, "The puzzle had %d solutions\n", n_solutions);
       } else {
         fprintf(stderr, "The puzzle had %d solutions (one is shown)\n", n_solutions);
-        display(stdout, lay, state);
+        display(stdout, lay, state, clus);
       }
     }
   }
 
   free(state);
+  if (clus) free_clusters(clus);
   free_layout(lay);
   return;
 }
@@ -124,10 +126,11 @@ void solve(const struct constraint *simplify_cons, int options)/*{{{*/
 void solve_any(int options)/*{{{*/
 {
   int *state;
+  struct clusters *clus;
   int n_solutions;
   struct layout *lay;
 
-  read_grid(&lay, &state, options);
+  read_grid(&lay, &state, &clus, options);
   setup_terminals(lay);
   n_solutions = infer(lay, state, NULL, NULL, &cons_all, OPT_SPECULATE | OPT_FIRST_ONLY | options);
 
@@ -136,9 +139,10 @@ void solve_any(int options)/*{{{*/
         "Showing how far the solver got before becoming stuck.\n");
   }
 
-  display(stdout, lay, state);
+  display(stdout, lay, state, clus);
 
   free(state);
+  if (clus) free_clusters(clus);
   free_layout(lay);
   return;
 }

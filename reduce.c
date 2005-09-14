@@ -261,6 +261,7 @@ void reduce(int iters_for_min,
 {
   int *state;
   int *result;
+  struct clusters *clus;
   int kept_givens = 0;
   struct layout *lay;
 
@@ -273,7 +274,7 @@ void reduce(int iters_for_min,
     exit(1);
   }
     
-  read_grid(&lay, &state, options);
+  read_grid(&lay, &state, &clus, options);
   result = new_array(int, lay->nc);
 
   if (!required_cons->is_default) {
@@ -293,7 +294,7 @@ void reduce(int iters_for_min,
         found = 1;
       }
     } while (!found);
-    display(stdout, lay, copy);
+    display(stdout, lay, copy, clus);
     free(copy2);
     free(copy);
   } else if (iters_for_min == 0) {
@@ -302,7 +303,7 @@ void reduce(int iters_for_min,
     if (options & OPT_VERBOSE) {
       fprintf(stderr, "%d givens kept\n", kept_givens);
     }
-    display(stdout, lay, state);
+    display(stdout, lay, state, clus);
   } else {
     int i;
     int min_givens;
@@ -316,18 +317,19 @@ void reduce(int iters_for_min,
         min_givens = kept_givens;
         if (options & OPT_VERBOSE) {
           fprintf(stderr, "Found a layout with %d givens\n", kept_givens);
-          display(stderr, lay, copy);
+          display(stderr, lay, copy, clus);
         }
         /* The result always has to have the minimum number of givens found so
          * far. */
         memcpy(result, copy, lay->nc * sizeof(int));
       }
     }
-    display(stdout, lay, result);
+    display(stdout, lay, result, clus);
   }
 
   free(result);
   free(state);
+  if (clus) free_clusters(clus);
   free_layout(lay);
   return;
 }

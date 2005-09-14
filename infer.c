@@ -1287,7 +1287,7 @@ static int inner_infer(struct layout *lay, struct ws *ws)/*{{{*/
       /* ugh, ought to be via an argument */
       static int sol_no = 1;
       printf("Solution %d:\n", sol_no++);
-      display(stdout, lay, ws->state);
+      display(stdout, lay, ws->state, NULL);
       printf("\n");
     }
     result = 1;

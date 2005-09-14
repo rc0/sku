@@ -95,10 +95,11 @@ void mark_cells(int grey_cells, const struct constraint *simplify_cons, int opti
   struct intpair *shade = NULL;
   int *order;
   int i, j;
+  struct clusters *clus;
   struct layout *lay;
   int score;
 
-  read_grid(&lay, &state, options);
+  read_grid(&lay, &state, &clus, options);
 
   if (grey_cells > 0) {
     order = new_array(int, lay->nc);
@@ -163,9 +164,10 @@ void mark_cells(int grey_cells, const struct constraint *simplify_cons, int opti
     free(shade);
   }
 
-  display(stdout, lay, state);
+  display(stdout, lay, state, clus);
 
   free(state);
+  if (clus) free_clusters(clus);
   free_layout(lay);
 }
 /*}}}*/

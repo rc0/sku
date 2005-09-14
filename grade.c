@@ -22,12 +22,13 @@
 void grade(int options)/*{{{*/
 {
   struct layout *lay;
+  struct clusters *clus;
   int *state;
   int *copy;
   struct constraint cons;
   int xl, xs, xo, xp, rxp;
 
-  read_grid(&lay, &state, options);
+  read_grid(&lay, &state, &clus, options);
   copy = new_array(int, lay->nc);
 
   printf("Available methods             Reqd partition size\n");
@@ -66,6 +67,7 @@ void grade(int options)/*{{{*/
 
   free(copy);
   free(state);
+  if (clus) free_clusters(clus);
   free_layout(lay);
 }
 /*}}}*/

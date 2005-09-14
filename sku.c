@@ -286,10 +286,7 @@ int main (int argc, char **argv)/*{{{*/
       format_output(options);
       break;
     case OP_TIDY:
-      fprintf(stderr, "Tidy is missing\n");
-#if 0
       tidy(options);
-#endif
       break;
   }
   return 0;

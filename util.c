@@ -82,6 +82,25 @@ void setup_terminals(struct layout *lay)/*{{{*/
 
 /* ============================================================================ */
 
+struct clusters *mk_clusters(int nc)/*{{{*/
+{
+  struct clusters *result;
+  result = new(struct clusters);
+  result->cells = new_array(unsigned char, nc);
+  memset(result->cells, '.', nc);
+  memset(result->total, 0, 256 * sizeof(short));
+  return result;
+}
+/*}}}*/
+void free_clusters(struct clusters *x)/*{{{*/
+{
+  free(x->cells);
+  free(x);
+}
+/*}}}*/
+
+/* ============================================================================ */
+
 const struct constraint cons_all = {/*{{{*/
   .do_lines = 1,
   .do_subsets = 1,
