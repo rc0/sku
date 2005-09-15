@@ -132,24 +132,50 @@ void find_symmetries(struct layout *lay, int options)/*{{{*/
   }
 }
 /*}}}*/
+
+struct displacement nbr_dis[4] = {/*{{{*/
+  {-1, 0}, {0, 1}, {1, 0}, {0, -1}
+};
+/*}}}*/
+void find_neighbours(struct layout *lay)/*{{{*/
+{
+  int NC;
+  int i;
+  int j;
+
+  NC = lay->nc;
+  for (i=0; i<NC; i++) {
+    for (j=0; j<4; j++) {
+      int y, x;
+      y = nbr_dis[j].dy + lay->cells[i].rrow;
+      x = nbr_dis[j].dx + lay->cells[i].rcol;
+      lay->cells[i].nbr[j] = find_cell_by_yx(lay->cells, NC, y, x);
+    }
+  }
+}
+/*}}}*/
 void debug_layout(struct layout *lay)/*{{{*/
 {
   int i, j;
   int count;
   for (i=0; i<lay->nc; i++) {
-    fprintf(stderr, "%3d : %4d P=(%4d,%4d) R=(%4d,%4d) %4s : %-16s ", 
+    fprintf(stderr, "%3d : %4d P=(%4d,%4d) R=(%4d,%4d) N=%3d,E=%3d,S=%3d,W=%3d %4s : %-16s ", 
         i,
         lay->cells[i].index,
         lay->cells[i].prow,
         lay->cells[i].pcol,
         lay->cells[i].rrow,
         lay->cells[i].rcol,
+        lay->cells[i].nbr[0],
+        lay->cells[i].nbr[1],
+        lay->cells[i].nbr[2],
+        lay->cells[i].nbr[3],
         lay->cells[i].is_overlap ? "OVER" : "    ",
         lay->cells[i].name);
     for (j=0; j<NDIM; j++) {
       int kk = lay->cells[i].group[j];
       if (kk >= 0) {
-        fprintf(stderr, " %d", kk);
+        fprintf(stderr, " %2d", kk);
       } else {
         break;
       }
@@ -235,10 +261,6 @@ struct layout *genlayout(const char *name, int options)/*{{{*/
     parse_mn(name1, slash-name1, &M, &N);
     make_super(slash+1, &superlay);
     layout_MxN_superlay(M, N, x_layout, &superlay, result, options);
-#if 0
-    debug_layout(result);
-    exit(0);
-#endif
     free_superlayout(&superlay);
   } else {
     parse_mn(name1, strlen(name1), &M, &N);
@@ -246,6 +268,11 @@ struct layout *genlayout(const char *name, int options)/*{{{*/
     result->is_additive = a_layout;
   }
   result->name = strdup(name);
+  find_neighbours(result);
+#if 0
+  debug_layout(result);
+  exit(0);
+#endif
   return result;
 }
 /*}}}*/

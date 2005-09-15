@@ -37,11 +37,19 @@ struct cell {/*{{{*/
   short prow, pcol;     /* coordinates for printing to text output */
   short rrow, rcol;     /* raw coordinates for printing to formatted output (SVG etc) */
   short isym;           /* index of next cell in same symmetry group (circular ring) */
+  short nbr[4];         /* indices of N,E,S,W neighbouring cells (-1 => none, i.e. at edge) */
   short group[NDIM];    /* table of groups the cell is in (-1 for unused dimensions) */
 };
 /*}}}*/
 
 #define SYM(x) (lay->cells[(x)].isym)
+
+struct displacement {/*{{{*/
+  int dy;
+  int dx;
+};
+/*}}}*/
+extern struct displacement nbr_dis[4];
 
 struct dline/*{{{*/
 {
