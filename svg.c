@@ -41,9 +41,28 @@ static void format_emit_lines(int n, struct dline *d, double stroke_width)/*{{{*
 /*}}}*/
 static void emit_clusters(struct layout *lay, struct clusters *clus)/*{{{*/
 {
+  struct cluster_coords *coords;
+  int i;
+  double scale, offset;
+  double x, y;
+  scale = 72.27 / 2.54;
+  offset = 2.0 * scale;
+  coords = mk_cluster_coords(lay, clus);
 
-
-
+  for (i=0; i<coords->n_points; i++) {
+    x = offset + scale * coords->points[i].x;
+    y = offset + scale * coords->points[i].y;
+    if (coords->type[i] == 1) {
+      printf("<path style=\"fill:none;stroke:#000;stroke-width:%f;stroke-linecap:square;stroke-linejoin:miter;stroke-miterlimit:4.0;stroke-opacity:1.0\"\n", 0.4);
+      printf("d=\"M %f,%f", x, y);
+    } else {
+      printf(" L %f,%f", x, y);
+    }
+    if (coords->type[i] == 2) {
+      printf("\" />\n");
+    }
+  }
+  free_cluster_coords(coords);
 }
 /*}}}*/
 void format_output(int options)/*{{{*/

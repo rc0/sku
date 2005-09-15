@@ -18,8 +18,8 @@
 
 CC := gcc
 #CFLAGS := -O2 -Wall -pg -fprofile-arcs -fno-inline
-CFLAGS := -O2 -Wall
-#CFLAGS := -g -Wall
+#CFLAGS := -O2 -Wall
+CFLAGS := -g -Wall
 
 PROG := sku
 OBJ := sku.o \
@@ -31,7 +31,8 @@ OBJ := sku.o \
 	reader.o \
 	mark.o \
 	grade.o \
-	tidy.o
+	tidy.o \
+	clusters.o
 
 $(PROG) : $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $^

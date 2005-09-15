@@ -128,6 +128,18 @@ struct clusters {/*{{{*/
   short total[256];
 };
 /*}}}*/
+struct point {/*{{{*/
+  double y;
+  double x;
+};
+/*}}}*/
+struct cluster_coords {/*{{{*/
+  int n_points;
+  struct point *points;
+  unsigned char *type;
+  /* TODO : numbers */
+};
+ /*}}}*/
 
 /* ============================================================================ */
 
@@ -227,6 +239,10 @@ extern void format_output(int options);
 
 /* In tidy.c */
 extern void tidy(int options);
+
+/* In clusters.c */
+extern struct cluster_coords *mk_cluster_coords(const struct layout *lay, const struct clusters *clus);
+extern void free_cluster_coords(struct cluster_coords *x);
 
 #endif /* SKU_H */
 
