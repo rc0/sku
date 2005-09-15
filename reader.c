@@ -80,7 +80,7 @@ void read_grid(struct layout **lay, int **state, struct clusters **clus, int opt
     } while (!valid[c]);
   }
 
-  if (clus) {
+  if (my_lay->is_additive) {
     char line[64];
     for (i=0; i<my_lay->nc; i++) {
       do {
