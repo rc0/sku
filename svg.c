@@ -19,6 +19,7 @@
 
 #include "sku.h"
 
+#define CLUSTER_LINE_WIDTH 0.6
 
 static void format_emit_lines(int n, struct dline *d, double stroke_width)/*{{{*/
 {
@@ -53,7 +54,11 @@ static void emit_clusters(struct layout *lay, struct clusters *clus)/*{{{*/
     x = offset + scale * coords->points[i].x;
     y = offset + scale * coords->points[i].y;
     if (coords->type[i] == 1) {
-      printf("<path style=\"fill:none;stroke:#000;stroke-width:%f;stroke-linecap:square;stroke-linejoin:miter;stroke-miterlimit:4.0;stroke-opacity:1.0\"\n", 0.4);
+      printf("<path style=\"fill:none;stroke:#000;stroke-width:%f;"
+          "stroke-linecap:butt;stroke-linejoin:miter;"
+          "stroke-miterlimit:4.0;stroke-opacity:1.0;"
+          "stroke-dasharray:%f,%f;stroke-dashoffset:0.0"
+          "\"\n", CLUSTER_LINE_WIDTH, CLUSTER_LINE_WIDTH, CLUSTER_LINE_WIDTH);
       printf("d=\"M %f,%f", x, y);
     } else {
       printf(" L %f,%f", x, y);
@@ -62,6 +67,18 @@ static void emit_clusters(struct layout *lay, struct clusters *clus)/*{{{*/
       printf("\" />\n");
     }
   }
+
+  for (i=0; i<coords->n_numbers; i++) {
+    double y, x;
+    printf("<text style=\"font-size:9;font-style:normal;font-variant:normal;"
+             "font-weight:bold;fill:#000;fill-opacity:1.0;stroke:none;"
+             "font-family:Luxi Sans;text-anchor:middle;writing-mode:lr-tb\"\n");
+    x = offset + scale * coords->numbers[i].x;
+    y = offset + scale * coords->numbers[i].y;
+    printf("x=\"%f\" y=\"%f\">%d</text>\n", x, y, coords->values[i]);
+  }
+
+  
   free_cluster_coords(coords);
 }
 /*}}}*/

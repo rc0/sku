@@ -19,34 +19,72 @@
 
 #include "sku.h"
 
+#define EDGE_OFFSET 0.15
+#define NUMBER_OFFSET_L 0.05
+#define NUMBER_OFFSET_C 0.25
+#define NUMBER_OFFSET_R 0.45
+#define NUMBER_OFFSET_V 0.15
+
 static void get_coords(int idx, int dirn, const struct layout *lay, double *y, double *x)/*{{{*/
 {
-  const double offset = 0.1;
   /* dirn is the direction of the neighbour from which we have entered the cell. */
   double yy, xx;
   yy = (double) lay->cells[idx].rrow;
   xx = (double) lay->cells[idx].rcol;
   switch (dirn) {
     case 0: /* From the N : want NE corner */
-      *y = yy + offset;
-      *x = xx + 1.0 - offset;
+      *y = yy + EDGE_OFFSET;
+      *x = xx + 1.0 - EDGE_OFFSET;
       break;
     case 1: /* From the E : want SE corner */
-      *y = yy + 1.0 - offset;
-      *x = xx + 1.0 - offset;
+      *y = yy + 1.0 - EDGE_OFFSET;
+      *x = xx + 1.0 - EDGE_OFFSET;
       break;
     case 2: /* From the S : want SW corner */
-      *y = yy + 1.0 - offset;
-      *x = xx + offset;
+      *y = yy + 1.0 - EDGE_OFFSET;
+      *x = xx + EDGE_OFFSET;
       break;
     case 3: /* From the W : want NW corner */
-      *y = yy + offset;
-      *x = xx + offset;
+      *y = yy + EDGE_OFFSET;
+      *x = xx + EDGE_OFFSET;
       break;
     default:
       fprintf(stderr, "Bad dirn in get_coords\n");
       exit(1);
   }
+}
+/*}}}*/
+static int fully_internal_p(int idx, const struct layout *lay, const struct clusters *clus)/*{{{*/
+{
+  /* Return true if the cell is surrounded by 8 neighbours all in the same
+   * cluster. */
+  int index_n, index_e, index_s, index_w;
+  int index_nw, index_ne, index_se, index_sw;
+  struct cell *cell;
+  struct cell *cell_n;
+  struct cell *cell_s;
+
+  cell = lay->cells + idx;
+  index_n = cell->nbr[0];
+  index_e = cell->nbr[1];
+  index_s = cell->nbr[2];
+  index_w = cell->nbr[3];
+
+  if ((index_n < 0) || (clus->cells[idx] != clus->cells[index_n])) return 0;
+  if ((index_e < 0) || (clus->cells[idx] != clus->cells[index_e])) return 0;
+  if ((index_s < 0) || (clus->cells[idx] != clus->cells[index_s])) return 0;
+  if ((index_w < 0) || (clus->cells[idx] != clus->cells[index_w])) return 0;
+  cell_n = lay->cells + cell->nbr[0];
+  cell_s = lay->cells + cell->nbr[2];
+  index_nw = cell_n->nbr[3];
+  index_ne = cell_n->nbr[1];
+  index_se = cell_s->nbr[1];
+  index_sw = cell_s->nbr[3];
+  if ((index_nw < 0) || (clus->cells[idx] != clus->cells[index_nw])) return 0;
+  if ((index_ne < 0) || (clus->cells[idx] != clus->cells[index_ne])) return 0;
+  if ((index_se < 0) || (clus->cells[idx] != clus->cells[index_se])) return 0;
+  if ((index_sw < 0) || (clus->cells[idx] != clus->cells[index_sw])) return 0;
+  return 1;
 }
 /*}}}*/
 /*{{{ do_cell() */
@@ -56,7 +94,7 @@ static void do_cell(int start_idx,
         const struct clusters *clus,
         struct cluster_coords *r)
 {
-  int n;
+  int n, nn;
   int dirn;
   double y, x;
   int idx;
@@ -64,21 +102,43 @@ static void do_cell(int start_idx,
   int i;
   int d1;
   int nidx;
+  int rdirn;
 
   done[start_idx] = 1;
   if (clus->cells[start_idx] == '.') return;
-    
+  if (fully_internal_p(start_idx, lay, clus)) return;
+
   /* Must be looking at a NW corner of the region (due to the order in which we
    * scan the grid). */
 
   n = r->n_points;
   idx = start_idx;
   dirn = 3;
-  
+
+  if      (lay->cells[start_idx].nbr[2] >= 0) rdirn = 2;
+  else if (lay->cells[start_idx].nbr[1] >= 0) rdirn = 1;
+  else if (lay->cells[start_idx].nbr[0]) {
+    fprintf(stderr, "do_cell(%s) : found an unscanned north neighbour!\n",
+        lay->cells[start_idx].name);
+    exit(1);
+  } else if (lay->cells[start_idx].nbr[3]) {
+    fprintf(stderr, "do_cell(%s) : found an unscanned west neighbour!\n",
+        lay->cells[start_idx].name);
+    exit(1);
+  }
+  else rdirn = -1; /* Must be a singleton; */
+
   get_coords(idx, dirn, lay, &y, &x);
-  r->points[n].y = y, r->points[n].x = x, r->type[n] = 1;
+  r->points[n].y = y, r->points[n].x = x + NUMBER_OFFSET_R, r->type[n] = 1;
+
   n++;
-  
+
+  nn = r->n_numbers;
+  r->numbers[nn].y = y + NUMBER_OFFSET_V;
+  r->numbers[nn].x = x + NUMBER_OFFSET_C;
+  r->values[nn] = clus->total[clus->cells[start_idx]];
+  r->n_numbers = nn + 1;
+
   do {
     got_new_cell = 0;
     d1 = -1;
@@ -136,9 +196,10 @@ static void do_cell(int start_idx,
         get_coords(idx, dirn, lay, &y, &x);
         r->points[n].y = y, r->points[n].x = x, r->type[n] = 2;
         n++;
+        dirn = -1; /* Special case to match rdirn */
         break;
     }
-    if ((idx == start_idx) && (dirn == 2)) { /* got back to the start */
+    if ((idx == start_idx) && (dirn == rdirn)) { /* got back to the start */
       get_coords(idx, (dirn + 1) & 3, lay, &y, &x);
       r->points[n].y = y, r->points[n].x = x, r->type[n] = 2;
       n++;
@@ -161,6 +222,10 @@ struct cluster_coords *mk_cluster_coords(const struct layout *lay, const struct 
   max_points = 5*NC;
   result->points = new_array(struct point, max_points);
   result->type = new_array(unsigned char, max_points);
+  result->n_numbers = 0;
+  /* Max size is if each cluster is a singleton. */
+  result->numbers = new_array(struct point, NC);
+  result->values = new_array(int, NC);
 
   cell_done = new_array(unsigned char, NC);
   memset(cell_done, 0, NC);

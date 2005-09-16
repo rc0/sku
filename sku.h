@@ -134,10 +134,15 @@ struct point {/*{{{*/
 };
 /*}}}*/
 struct cluster_coords {/*{{{*/
+  /* Line segments. */
   int n_points;
   struct point *points;
   unsigned char *type;
-  /* TODO : numbers */
+
+  /* Cluster totals */
+  int n_numbers;
+  struct point *numbers;
+  int *values;
 };
  /*}}}*/
 
