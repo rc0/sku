@@ -19,11 +19,11 @@
 
 #include "sku.h"
 
-#define EDGE_OFFSET 0.15
-#define NUMBER_OFFSET_L 0.05
-#define NUMBER_OFFSET_C 0.25
-#define NUMBER_OFFSET_R 0.45
+#define EDGE_OFFSET 0.10
+#define NUMBER_OFFSET_R1 0.25
+#define NUMBER_OFFSET_R2 0.35
 #define NUMBER_OFFSET_V 0.15
+#define NUMBER_OFFSET_VV 0.2
 
 static void get_coords(int idx, int dirn, const struct layout *lay, double *y, double *x)/*{{{*/
 {
@@ -103,6 +103,7 @@ static void do_cell(int start_idx,
   int d1;
   int nidx;
   int rdirn;
+  int value;
 
   done[start_idx] = 1;
   if (clus->cells[start_idx] == '.') return;
@@ -115,28 +116,37 @@ static void do_cell(int start_idx,
   idx = start_idx;
   dirn = 3;
 
-  if      (lay->cells[start_idx].nbr[2] >= 0) rdirn = 2;
-  else if (lay->cells[start_idx].nbr[1] >= 0) rdirn = 1;
-  else if (lay->cells[start_idx].nbr[0]) {
+  if      (((nidx = lay->cells[start_idx].nbr[2]) >= 0) &&
+           (clus->cells[start_idx] == clus->cells[nidx])) {
+    rdirn = 2;
+  } else if (((nidx = lay->cells[start_idx].nbr[1]) >= 0) &&
+             (clus->cells[start_idx] == clus->cells[nidx])) {
+    rdirn = 1;
+  } else if (((nidx = lay->cells[start_idx].nbr[0]) >= 0) &&
+             (clus->cells[start_idx] == clus->cells[nidx])) {
     fprintf(stderr, "do_cell(%s) : found an unscanned north neighbour!\n",
         lay->cells[start_idx].name);
     exit(1);
-  } else if (lay->cells[start_idx].nbr[3]) {
+  } else if (((nidx = lay->cells[start_idx].nbr[3]) >= 0) &&
+             (clus->cells[start_idx] == clus->cells[nidx])) {
     fprintf(stderr, "do_cell(%s) : found an unscanned west neighbour!\n",
         lay->cells[start_idx].name);
     exit(1);
   }
   else rdirn = -1; /* Must be a singleton; */
 
+  value = clus->total[clus->cells[start_idx]];
   get_coords(idx, dirn, lay, &y, &x);
-  r->points[n].y = y, r->points[n].x = x + NUMBER_OFFSET_R, r->type[n] = 1;
+  r->points[n].y = y;
+  r->points[n].x = x + ((value >= 10) ? NUMBER_OFFSET_R2 : NUMBER_OFFSET_R1);
+  r->type[n] = 1;
 
   n++;
 
   nn = r->n_numbers;
   r->numbers[nn].y = y + NUMBER_OFFSET_V;
-  r->numbers[nn].x = x + NUMBER_OFFSET_C;
-  r->values[nn] = clus->total[clus->cells[start_idx]];
+  r->numbers[nn].x = x;
+  r->values[nn] = value;
   r->n_numbers = nn + 1;
 
   do {
@@ -200,8 +210,13 @@ static void do_cell(int start_idx,
         break;
     }
     if ((idx == start_idx) && (dirn == rdirn)) { /* got back to the start */
-      get_coords(idx, (dirn + 1) & 3, lay, &y, &x);
-      r->points[n].y = y, r->points[n].x = x, r->type[n] = 2;
+      if (dirn == 1) {
+        get_coords(idx, 2, lay, &y, &x);
+        r->points[n].y = y, r->points[n].x = x, r->type[n] = 0;
+        n++;
+      }
+      get_coords(idx, 3, lay, &y, &x);
+      r->points[n].y = y + NUMBER_OFFSET_VV, r->points[n].x = x, r->type[n] = 2;
       n++;
       got_new_cell = 0;
     }

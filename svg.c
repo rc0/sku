@@ -19,7 +19,7 @@
 
 #include "sku.h"
 
-#define CLUSTER_LINE_WIDTH 0.6
+#define CLUSTER_LINE_WIDTH 0.9
 
 static void format_emit_lines(int n, struct dline *d, double stroke_width)/*{{{*/
 {
@@ -70,9 +70,9 @@ static void emit_clusters(struct layout *lay, struct clusters *clus)/*{{{*/
 
   for (i=0; i<coords->n_numbers; i++) {
     double y, x;
-    printf("<text style=\"font-size:9;font-style:normal;font-variant:normal;"
+    printf("<text style=\"font-size:7;font-style:normal;font-variant:normal;"
              "font-weight:bold;fill:#000;fill-opacity:1.0;stroke:none;"
-             "font-family:Luxi Sans;text-anchor:middle;writing-mode:lr-tb\"\n");
+             "font-family:Luxi Sans;text-anchor:left;writing-mode:lr-tb\"\n");
     x = offset + scale * coords->numbers[i].x;
     y = offset + scale * coords->numbers[i].y;
     printf("x=\"%f\" y=\"%f\">%d</text>\n", x, y, coords->values[i]);
@@ -144,8 +144,8 @@ void format_output(int options)/*{{{*/
   }
 
   format_emit_lines(lay->n_thinlines, lay->thinlines, 0.5);
-  format_emit_lines(lay->n_mediumlines, lay->mediumlines, 1.5);
-  format_emit_lines(lay->n_thicklines, lay->thicklines, 3.0);
+  format_emit_lines(lay->n_mediumlines, lay->mediumlines, 1.2);
+  format_emit_lines(lay->n_thicklines, lay->thicklines, 2.0);
 
   for (i=0; i<lay->nc; i++) {
     if (state[i] >= 0) {
